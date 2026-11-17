@@ -647,11 +647,16 @@
             </div>
           </article>
         </div>
-        <article class="soon-card">
-          <strong>Пакеты кристаллов</strong>
-          <span>Оплата пока не подключена</span>
-          <button class="btn btn-secondary" type="button" disabled>Скоро</button>
-        </article>
+        <section class="economy-panel" aria-label="Пополнение кристаллов">
+          <h2>Пакеты кристаллов</h2>
+          <div id="crystal-star-packs" class="roll-packages"></div>
+          <p id="crystal-payment-status" class="hint" role="status"></p>
+          <details>
+            <summary>Условия покупки</summary>
+            <p class="hint">Пакет пополняет игровой баланс на указанное число кристаллов после подтверждения оплаты Telegram. Состав и шансы рамок показаны отдельно перед их открытием. Вопросы по начислению и возврату — /paysupport в боте с номером платежа из квитанции.</p>
+          </details>
+          <p class="hint">Оплата в Telegram Stars. Помощь с оплатой — /paysupport в боте.</p>
+        </section>
       </div>
       <div id="craft-pane" hidden>
         <article class="economy-panel">
@@ -815,10 +820,12 @@
         </button>
       </section>
       <h2 class="section-label">Активные лоты</h2>
-      <button id="notification-settings" class="btn btn-secondary btn-block" type="button">Уведомления Telegram</button>
       <div id="my-listings"></div>
       <h2 class="section-label">Ссылки передачи</h2>
       <div id="my-transfers"></div>
+      <div class="profile-settings-actions">
+        <button id="notification-settings" class="btn btn-secondary btn-block" type="button">Уведомления Telegram</button>
+      </div>
       <div class="hidden-contract">
         <div id="home-avatar"></div>
         <span id="card-count">0</span>
@@ -950,7 +957,7 @@
   </aside>
 
   <div id="select-bar" class="select-bar" hidden>
-    <button id="select-review" class="btn btn-primary" type="button" disabled>Выбрано 0 · Проверить</button>
+    <button id="select-review" class="btn btn-primary" type="button" disabled>Распылить · Выбрано 0</button>
     <button id="select-cancel" class="btn btn-secondary" type="button">Отмена</button>
     <button class="btn btn-secondary" type="button" data-select-action="transfer">Передать</button>
     <button class="btn btn-primary" type="button" data-select-action="sell">Продать</button>

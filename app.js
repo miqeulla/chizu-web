@@ -608,6 +608,7 @@
   async function loadWalletHistory(currency, container, before = null) {
     const units = { dust: "пыли", crystals: "кристаллов", rolls: "бил." };
     const reasons = {
+      crystals_purchased: "Покупка за Telegram Stars",
       admin_grant: "Корректировка баланса", daily_reward_claimed: "Ежедневная награда",
       dust: "Распыление карт", dust_ticket_purchased: "Билет за пыль",
       rolls_purchased: "Билеты за кристаллы", extra_roll_used: "Призыв за билет",
@@ -1031,6 +1032,55 @@
     el("profile-tier-badge").hidden = !isVip;
   }
 
+  let starPaymentBusy = false;
+
+  function renderStarPacks() {
+    const container = el("crystal-star-packs");
+    container.replaceChildren(...(state.profile?.crystal_star_packs || []).map(pack => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "btn btn-secondary";
+      button.textContent = `${pack.crystals} кристаллов · ${pack.stars} ⭐`;
+      button.disabled = starPaymentBusy || !tg?.openInvoice;
+      button.addEventListener("click", () => buyStarPack(pack.id));
+      return button;
+    }));
+  }
+
+  async function buyStarPack(packId) {
+    if (starPaymentBusy || !tg?.openInvoice) return;
+    starPaymentBusy = true;
+    renderStarPacks();
+    const status = el("crystal-payment-status");
+    status.textContent = "Открываем оплату…";
+    try {
+      const invoice = await api("/api/payments/stars", {
+        method: "POST", body: JSON.stringify({ pack_id: packId }),
+      });
+      const result = await new Promise(resolve => tg.openInvoice(invoice.invoice_url, resolve));
+      if (result === "cancelled" || result === "failed") {
+        status.textContent = result === "cancelled" ? "Оплата отменена." : "Оплата не прошла. Можно попробовать снова.";
+        return;
+      }
+      status.textContent = "Проверяем оплату…";
+      for (let attempt = 0; attempt < 15; attempt++) {
+        const payment = await api(`/api/payments/stars/${encodeURIComponent(invoice.order)}`);
+        if (payment.paid) {
+          await loadProfile();
+          status.textContent = "Кристаллы зачислены.";
+          return;
+        }
+        await pause(1000);
+      }
+      status.textContent = "Платёж ещё обрабатывается. Бот сообщит о зачислении. Помощь — /paysupport.";
+    } catch (error) {
+      status.textContent = `Не удалось проверить оплату: ${error.message}. Если Stars списаны, дождитесь сообщения бота или отправьте /paysupport.`;
+    } finally {
+      starPaymentBusy = false;
+      renderStarPacks();
+    }
+  }
+
   async function fetchOwnProfile() {
     const backgroundSaveVersion = state.backgroundSaveVersion;
     const profile = await api("/api/me");
@@ -1038,6 +1088,7 @@
       profile.profile_background = state.profile.profile_background;
     }
     state.profile = profile;
+    renderStarPacks();
     if (profile.profile_background) await loadBackgrounds();
     syncAppBackground();
     return profile;
@@ -1483,7 +1534,7 @@
     const count = duplicateMode ? copies.selected.size : cards.length;
     bar.hidden = state.activePage !== "collection" ||
       !(duplicateMode ? count > 0 : state.collectionMode === "cards" && state.selectMode);
-    el("select-review").textContent = `Выбрано ${count} · Проверить`;
+    el("select-review").textContent = `Распылить · Выбрано ${count}`;
     el("select-review").disabled = count === 0 || copies.busy;
     bar.querySelectorAll("[data-select-action]").forEach((button) => { button.hidden = duplicateMode; });
   }
@@ -1828,22 +1879,50 @@
     confirm.textContent = "Распылить";
     confirm.className = "btn btn-danger btn-block";
     let estimate;
+    let submitting = false;
+    const rows = new Map();
+    const cleanup = displayButton("Оставить только доступные", () => {
+      if (submitting) return;
+      for (const card of cards) {
+        if (!availableIds.has(card.id)) state.collectionSelected.delete(card.id);
+      }
+      renderCollectionSelection();
+      renderCollection();
+      if (state.collectionSelected.size) reviewSelectedCards();
+      else closeSheet();
+    });
+    cleanup.hidden = true;
+    let availableIds = new Set();
     for (const card of cards) {
-      body.append(selectionReviewRow(card, "", () => {
+      const row = selectionReviewRow(card, "", () => {
+        if (submitting) return;
         state.collectionSelected.delete(card.id);
         renderCollectionSelection();
         renderCollection();
         if (state.collectionSelected.size) reviewSelectedCards();
         else closeSheet();
-      }));
+      });
+      rows.set(card.id, row);
+      body.append(row);
     }
-    body.append(summary, confirm);
+    const cancel = displayButton("Вернуться к выбору", () => { if (!submitting) closeSheet(); });
+    body.append(summary, cleanup, confirm, cancel);
     confirm.addEventListener("click", async () => {
       if (confirm.disabled) return;
-      confirm.disabled = true;
+      submitting = true;
+      body.querySelectorAll("button").forEach((button) => { button.disabled = true; });
       try {
-        if (await dustSelected(false, estimate)) closeSheet();
-      } finally { confirm.disabled = false; }
+        if (await dustSelected(estimate)) {
+          if (body.isConnected) closeSheet();
+        } else if (body.isConnected) {
+          await load();
+        }
+      } finally {
+        submitting = false;
+        rows.forEach((row) => { row.querySelector("button").disabled = false; });
+        cleanup.disabled = false;
+        cancel.disabled = false;
+      }
     });
     const load = async () => {
       confirm.disabled = true;
@@ -1851,23 +1930,36 @@
       try {
         const result = await api(`/api/dust/preview?cards=${cards.map((card) => card.id).join(",")}`);
         if (!body.isConnected) return;
-        cards.forEach((card, index) => {
-          const details = body.children[index].querySelector(".hint");
-          details.textContent = [formatPrintNumber(card), `Останется: ${result.remaining[card.character_id]}`,
-            result.protected.includes(card.id) ? "Защищена" : ""].filter(Boolean).join(" · ");
+        const blocked = new Map(result.protected.map((id) => [id, "Избранная карта"]));
+        availableIds = new Set(cards.filter((card) => !blocked.has(card.id)).map((card) => card.id));
+        cards.forEach((card) => {
+          const details = rows.get(card.id).querySelector(".hint");
+          details.textContent = [formatPrintNumber(card), blocked.get(card.id) ||
+            `Останется: ${result.remaining[card.character_id]}`].filter(Boolean).join(" · ");
         });
         estimate = result.amount;
-        const blocked = result.protected.length || Object.values(result.remaining).some((count) => count < 1);
-        summary.textContent = blocked ? "Уберите защищённые и последние экземпляры."
-          : `Вы получите ${estimate} пыли.`;
-        confirm.disabled = Boolean(blocked);
+        summary.textContent = blocked.size ? `Недоступно: ${blocked.size}. ${availableIds.size
+          ? "Нажмите «Оставить только доступные», чтобы убрать их из выбора."
+          : "Снимите отметку избранного в карточке или измените выбор."}`
+          : `Вы получите ${estimate} пыли. ${dustLossWarning(cards, result.remaining)} Действие нельзя отменить.`;
+        cleanup.hidden = !blocked.size || !availableIds.size;
+        confirm.textContent = blocked.size ? "Распыление недоступно" : `Распылить ${cards.length} · ${estimate} пыли`;
+        confirm.disabled = Boolean(blocked.size);
       } catch (error) {
         if (body.isConnected) summary.replaceChildren(displayButton("Повторить расчёт", load));
         showError(error);
       }
     };
-    openSheet("Выбранные карты", body);
+    openSheet("Проверьте распыление", body);
     load();
+  }
+
+  function dustLossWarning(cards, remaining) {
+    const warnings = [];
+    if (Object.values(remaining).some((count) => count === 0)) warnings.push("Среди выбранных есть последние экземпляры.");
+    if (cards.some((card) => card.frame_style && card.frame_style !== "classic")) warnings.push("Закреплённые коллекционные рамки исчезнут.");
+    if (cards.some((card) => card.upgrade_level > 0)) warnings.push("Улучшения исчезнут без возврата пыли.");
+    return warnings.join(" ");
   }
 
   async function toggleFavorite(card) {
@@ -1994,8 +2086,7 @@
       [`Распылить за ${card.dust_value} пыли`, "danger", () => withFirstTip("dust", "Первое распыление",
         "Карта исчезнет из коллекции, а пыль поступит в кошелёк. Действие потребует подтверждения.", async () => {
         state.collectionSelected = new Map([[card.id, card]]);
-        closeSheet();
-        await dustSelected();
+        reviewSelectedCards();
       })],
     ];
     buttons.forEach(([label, kind, handler]) => {
@@ -4063,19 +4154,9 @@
     setBalance(result.balance);
   }
 
-  async function dustSelected(alreadyConfirmed = false, estimate) {
+  async function dustSelected(estimate) {
     const cards = [...state.collectionSelected.values()];
-    if (!cards.length) return;
-    const favorites = cards.filter((card) => state.favorites.some((item) => item.id === card.id));
-    if (cards.length > 1 && favorites.length) {
-      showError(new Error("Избранные карты защищены от массового распыления. Уберите их из выбора."));
-      return;
-    }
-    const value = estimate ?? cards.reduce((sum, card) => sum + card.dust_value, 0);
-    const warning = (favorites.length ? " Карта в избранном!" : cards.some((card) => ["legendary", "mythical"].includes(card.rarity)) ? " Среди карт есть легендарные или мифические!" : "") +
-      (cards.some((card) => card.upgrade_level > 0) ? " Оплаченное оформление исчезнет без возврата пыли!" : "");
-    if (!alreadyConfirmed && !await confirmAction(
-      `Распылить карт: ${cards.length}, за ${value} пыли?${warning} Это действие нельзя отменить.`)) return;
+    if (!cards.length || !Number.isInteger(estimate)) return;
     try {
       const result = await api("/api/dust", {
         method: "POST",
@@ -4297,11 +4378,9 @@
   el("drop-dust").addEventListener("click", async () => {
     if (!state.lastDropCard) return;
     const card = state.lastDropCard;
-    if (!await confirmAction(
-      `Распылить карту «${card.name}» за ${card.dust_value} пыли? Это действие нельзя отменить.`)) return;
     closeDropOpening();
     state.collectionSelected = new Map([[card.id, card]]);
-    await dustSelected(true);
+    reviewSelectedCards();
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !el("vip-history-dialog").open) {
@@ -4588,7 +4667,7 @@
     showPage("collection");
     haptic("light");
   });
-  el("dust-selected").addEventListener("click", () => dustSelected());
+  el("dust-selected").addEventListener("click", reviewSelectedCards);
   el("transfer-selected").addEventListener("click", transferSelected);
   el("sell-selected").addEventListener("click", sellSelected);
   el("create-lot").addEventListener("click", () => {

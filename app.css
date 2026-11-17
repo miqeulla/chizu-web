@@ -1405,6 +1405,7 @@ html:has(.vip-history-dialog[open]) { overflow: hidden; }
 .select-bar[hidden] { display: none; }
 .select-bar span { flex: 1 1 100%; font-size: 12px; color: var(--muted); }
 .select-bar .btn { flex: 1; min-height: 40px; }
+.select-bar #select-review { flex-basis: 100%; }
 
 .skeleton {
   border-radius: 12px;
@@ -3915,6 +3916,7 @@ body:has(#home-page:not([hidden])) .topbar-brand { font-family: "Chizu Display",
 #account-page .stat span { display: block; margin-top: 4px; color: #e0cce9; font-size: 10px; line-height: 1.2; overflow-wrap: anywhere; }
 #account-page .referral-panel, #account-page .privacy-panel { gap: 10px; margin: 14px 0; padding: 15px; }
 #account-page .referral-panel .hint { margin: 0; line-height: 1.45; }
+#account-page .profile-settings-actions { margin-top: 20px; }
 #account-page .referral-stats span { background: #24113fc9; border-color: #dfb9ca4d; }
 #account-page .referral-stats strong { color: #ffe4b5; }
 #account-page .privacy-panel label { min-height: 42px; padding: 4px 2px; color: #f0e2f6; }
