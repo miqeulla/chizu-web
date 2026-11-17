@@ -68,11 +68,20 @@ html, body {
 body {
   margin: 0;
   min-height: 100dvh;
-  background:
-    radial-gradient(ellipse at 50% -18%, #2a1b4d 0, transparent 52%),
-    var(--bg);
+  isolation: isolate;
+  background-color: #130535;
   color: var(--text);
   font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, #19074b55, #10043480 70%, #10032fa6),
+    var(--profile-background-image, url("moon-garden-reference.webp")) center / cover no-repeat;
 }
 button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
@@ -804,6 +813,8 @@ img {
   font-size: 12px;
 }
 .referral-history-item .hint, .vip-history-item .hint { text-align: right; }
+.vip-history-item { align-items: baseline; text-align: left; overflow-wrap: anywhere; }
+.vip-history-item .hint { flex: 0 0 46%; }
 .profile-head h2 { margin: 0; font-size: 20px; }
 .profile-tabs {
   display: grid;
@@ -984,36 +995,12 @@ img {
   font-size: 13px;
 }
 .player-hero {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 10px;
-  min-height: 250px;
   margin-bottom: 16px;
   padding: 18px;
-  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-sheet);
-  background: linear-gradient(160deg, #2c1c4d, #171029 70%);
-  background-position: center;
-  background-size: cover;
-  isolation: isolate;
-}
-.player-hero::after {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, #0b0716 4%, transparent) 0%,
-    color-mix(in srgb, #0b0716 26%, transparent) 46%,
-    color-mix(in srgb, #0b0716 88%, transparent) 100%
-  );
-  content: "";
-}
-.player-hero:not(.has-background)::after {
-  background: radial-gradient(circle at 80% 0%, #b57bff33, transparent 55%);
+  background: radial-gradient(circle at 80% 0%, #b57bff33, transparent 55%),
+    linear-gradient(160deg, #2c1c4dc9, #171029d9 70%);
 }
 .player-hero-content {
   display: flex;
@@ -1439,6 +1426,19 @@ img.frame-preview {
   text-align: left;
   white-space: pre-wrap;
 }
+.vip-history-dialog {
+  position: fixed;
+  inset: 0;
+  width: min(calc(100% - 32px), 380px);
+  height: fit-content;
+  overflow: hidden;
+  color: var(--text);
+}
+.vip-history-dialog[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.vip-history-dialog::backdrop { background: #0b0814cc; }
+.vip-history-scroll { overflow-y: auto; overscroll-behavior: contain; }
+.vip-history-scroll p { margin: 0; }
+html:has(.vip-history-dialog[open]) { overflow: hidden; }
 #notice { display: none; }
 
 .select-bar {
@@ -1749,17 +1749,6 @@ img.frame-preview {
 body:has(#home-page:not([hidden])) #home-page {
   position: relative;
   isolation: isolate;
-}
-
-body:has(#home-page:not([hidden])) #home-page::before {
-  position: fixed;
-  z-index: -1;
-  inset: 0;
-  background:
-    linear-gradient(180deg, #160b2c33 0%, #150b2c55 54%, #10091f99 100%),
-    url("../fon.png") center top / cover no-repeat;
-  content: "";
-  pointer-events: none;
 }
 
 body:has(#home-page:not([hidden])) .topbar {
@@ -2129,13 +2118,6 @@ body:has(#home-page:not([hidden])) .card-back .mark {
   8% { opacity: .8; }
   88% { opacity: .7; }
   100% { opacity: 0; transform: translate3d(48px, 108vh, 0) rotate(620deg); }
-}
-
-body {
-  background:
-    linear-gradient(180deg, #130a27a8 0%, #10091fd9 72%, #10091ff2 100%),
-    url("../fon.png") center top / cover fixed no-repeat,
-    #10091f;
 }
 
 .app { position: relative; }
@@ -3288,9 +3270,6 @@ body:has(#home-page:not([hidden])) #drop-button { color: #272333; background: li
 .drop-overlay.is-results .drop-followup { width: min(100%, 320px); }
 
 /* Главная: лунный сад */
-body:has(#home-page:not([hidden])) #home-page::before {
-  background: linear-gradient(180deg, #10082055, #10082099 65%, #100820d9), url("home-moon.webp") center top / cover no-repeat;
-}
 body:has(#home-page:not([hidden])) .hero { padding-top: 4px; }
 #home-page .summon-heading {
   width: 100%; min-height: 126px; padding: 22px 18px;
@@ -3322,7 +3301,6 @@ body:has(#home-page:not([hidden])) .main-nav { border-color: #ba80ea55; backgrou
 
 /* Единый лунный стиль разделов */
 body {
-  background: linear-gradient(180deg, #10082077, #100820c9 65%, #100820ed), url("home-moon.webp") center top / cover fixed no-repeat, #100820;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   line-height: 1.5;
 }
@@ -3432,12 +3410,6 @@ body:has(#home-page:not([hidden])) .card-back .mark { width: 63%; height: 63%; c
   --line: #a765e474;
   --muted: #d0b8e6;
 }
-body {
-  background: linear-gradient(180deg, #25104333, #21103a79 65%, #190c32b8), url("home-moon.webp") center top / cover fixed no-repeat, #21103b;
-}
-body:has(#home-page:not([hidden])) #home-page::before {
-  background: linear-gradient(180deg, #25104322, #24103a55 65%, #190c3299), url("home-moon.webp") center top / cover no-repeat;
-}
 #home-page .stock-panel, #home-page .ticket-panel, #home-page .daily-banner,
 .listing, .side, .vip-status-card, .referral-panel, .privacy-panel,
 .player-result, .stat, .roll-package, .frame-item, .soon-card,
@@ -3490,12 +3462,6 @@ body:has(#home-page:not([hidden])) .daily-banner p { color: #f1dfff; }
 body:has(#home-page:not([hidden])) .daily-banner { border-color: #d095fa91; background: linear-gradient(125deg, #552585ed, #37165fec 55%, #2d1355f0); box-shadow: inset 0 1px #f5d6ff35, 0 6px 22px #16042455, 0 0 12px #bb60f02a; }
 
 /* Лунный магазин: композиция и отделка в духе референса. */
-body {
-  background: linear-gradient(180deg, #19074b22, #10043466 70%, #10032f99), url("moon-garden-reference.webp") center top / cover fixed no-repeat, #130535;
-}
-body:has(#home-page:not([hidden])) #home-page::before {
-  background: linear-gradient(180deg, #19074b22, #10043455 70%, #10032f88), url("moon-garden-reference.webp") center top / cover no-repeat;
-}
 .topbar, body:has(#home-page:not([hidden])) .topbar { background: #10032edb; border-color: #b04dfc66; }
 .chip, body:has(#home-page:not([hidden])) .chip {
   min-height: 34px; border-radius: 999px; border-color: #a84dfc99;
@@ -3797,6 +3763,45 @@ body:has(#home-page:not([hidden])) .card-back.card-back-illustrated {
   -webkit-mask-image: none; mask-image: none;
 }
 .home-summon-image { display: block; width: 100%; height: 100%; object-fit: contain; }
+
+#home-page .card-back-illustrated::after {
+  position: absolute;
+  z-index: -1;
+  inset: 4% -12%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, #df94ff85, #9c45ef44 42%, transparent 72%);
+  opacity: .6;
+  content: "";
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  #home-page .home-summon-image {
+    animation: home-summon-float 5.6s ease-in-out infinite;
+  }
+  #home-page .card-back-illustrated::after {
+    animation: home-summon-glow 5.6s ease-in-out infinite;
+  }
+  #home-page .summon-ring-stars::before,
+  #home-page .summon-ring-stars::after {
+    animation: home-summon-twinkle 3.4s ease-in-out infinite;
+  }
+  #home-page .summon-ring-stars::after { animation-delay: -1.7s; }
+}
+
+@keyframes home-summon-float {
+  0%, 100% { transform: translateY(5%) rotate(-5deg); }
+  50% { transform: translateY(-8%) rotate(5deg) scale(1.04); }
+}
+
+@keyframes home-summon-glow {
+  0%, 100% { opacity: .45; transform: translateY(4%) scale(.94); }
+  50% { opacity: .9; transform: translateY(-6%) scale(1.08); }
+}
+
+@keyframes home-summon-twinkle {
+  0%, 100% { opacity: .5; transform: scale(.85); }
+  50% { opacity: 1; transform: scale(1.25); }
+}
 
 /* Единая тема: лунное стекло и золотая отделка. */
 :root {
@@ -4738,19 +4743,70 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 .frame-roulette-award img { display: block; width: 112px; height: 168px; object-fit: contain; margin: auto; }
 #frame-roulette-result { font-size: 14px; line-height: 1.5; color: #ffe7b3; }
 
-/* Upgrades live strictly inside the illustration, below its information panel. */
-.card-art-fx { position: absolute; z-index: 1; inset: 2.33% 3.5% 21%; overflow: hidden; border-radius: 16px 16px 0 0; pointer-events: none; }
+/* Reveal the effect over the current illustration while the new image renders. */
+.sheet.sheet--card .card-upgrade-complete .sheet-card,
+.sheet.sheet--card .card-upgrade-complete .card-frame-status,
+.sheet.sheet--card .card-upgrade-complete .sheet-actions { animation: none; }
+.card-art-fx {
+  position: absolute;
+  z-index: 1;
+  inset: 2.33% 3.5% 21%;
+  overflow: hidden;
+  border-radius: 8% 8% 0 0;
+  pointer-events: none;
+}
 .card-art-fx--padded { inset: 5.03% 7.34% 22.64%; }
-.card-art-fx::before { content: ""; position: absolute; inset: 0; background: linear-gradient(115deg, transparent 25%, #c7dcff16 42%, #ffcdf320 48%, transparent 64%); background-size: 250% 100%; opacity: .45; animation: art-pearl 7s ease-in-out infinite alternate paused; }
-.card-art-fx--motes::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 9% 23%, #e5deff 0 1px, transparent 3px), radial-gradient(circle at 92% 44%, #ffe5ff 0 1px, transparent 3px), radial-gradient(circle at 8% 72%, #d5eaff 0 1px, transparent 2px), radial-gradient(circle at 90% 84%, #e3d5ff 0 1px, transparent 3px); opacity: .45; animation: art-motes 4s ease-in-out infinite alternate paused; }
-.sheet-card .card-art-fx::before, .sheet-card .card-art-fx::after,
-.card:focus-visible .card-art-fx::before, .card:focus-visible .card-art-fx::after,
-.card:hover .card-art-fx::before, .card:hover .card-art-fx::after { animation-play-state: running; }
-.page-hidden .card-art-fx::before, .page-hidden .card-art-fx::after { animation-play-state: paused !important; }
-@keyframes art-pearl { from { background-position: 0% 0; opacity: .25; } to { background-position: 100% 0; opacity: .65; } }
-@keyframes art-motes { from { opacity: .25; transform: translateY(3px); } to { opacity: .8; transform: translateY(-3px); } }
+.card-art-fx[data-level="1"] {
+  background: radial-gradient(ellipse at center, transparent 30%, #a651e45e);
+}
+.card-art-fx[data-level="2"] {
+  background: linear-gradient(124deg, #5decf855, transparent 42%, #fb87d650);
+}
+.card-art-fx[data-level="3"] {
+  background: radial-gradient(ellipse at center, transparent 36%, #ffa62856);
+}
+.card-upgrade-complete .card-art-fx::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.card-upgrade-complete .card-art-fx[data-level="1"]::after {
+  background: radial-gradient(ellipse, transparent 36%, #ca78ffc0 60%, #f7d1ff 67%, transparent 73%);
+  animation: upgrade-amethyst 1s ease-out both;
+}
+.card-upgrade-complete .card-art-fx[data-level="2"]::after {
+  background: linear-gradient(122deg, transparent 26%, #58f8ff80 40%, #e9ffffeb 48%,
+    #c49bffba 53%, #ff94df99 59%, transparent 70%);
+  animation: upgrade-prism 1.1s ease-out both;
+}
+.card-upgrade-complete .card-art-fx[data-level="3"]::after {
+  background:
+    radial-gradient(circle at 12% 20%, #fffce3 1%, #ffd068 2%, transparent 4%),
+    radial-gradient(circle at 84% 17%, #fffae2 1%, #ffb73d 2%, transparent 4%),
+    radial-gradient(circle at 32% 10%, #fff8d0 1%, transparent 3%),
+    radial-gradient(circle at 84% 45%, #fffce3 1%, #ffd068 2%, transparent 4%),
+    radial-gradient(circle at 10% 53%, #fff8d0 1%, transparent 3%),
+    radial-gradient(circle at 23% 79%, #fffae2 1%, #ffb73d 2%, transparent 4%),
+    radial-gradient(circle at 86% 86%, #fffce3 1%, #ffd068 2%, transparent 4%),
+    radial-gradient(ellipse, #ffe7a87a, transparent 52%);
+  animation: upgrade-constellation 1.2s ease-out both;
+}
+@keyframes upgrade-amethyst {
+  from { transform: scale(.32); opacity: .85; }
+  to { transform: scale(1.85); opacity: 0; }
+}
+@keyframes upgrade-prism {
+  from { transform: translateX(-65%); opacity: .9; }
+  65% { opacity: 1; }
+  to { transform: translateX(85%); opacity: 0; }
+}
+@keyframes upgrade-constellation {
+  from { transform: scale(.24); opacity: .85; }
+  60% { opacity: 1; }
+  to { transform: scale(1.27); opacity: 0; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .card-art-fx::before, .card-art-fx::after { animation: none !important; }
+  .card-upgrade-complete .card-art-fx::after { display: none; }
 }
 
 /* Each pack has a different motion language as well as a different silhouette. */

@@ -773,6 +773,8 @@
       <article id="vip-status-card" class="vip-status-card" hidden>
         <strong class="vip-status-heading"><span class="vip-badge">VIP</span><span id="vip-status-title"></span></strong>
         <span id="vip-status-description" class="hint"></span>
+        <button id="vip-history-open" class="btn btn-secondary" type="button"
+          aria-haspopup="dialog" aria-controls="vip-history-dialog">История выпадений</button>
       </article>
       <section class="referral-panel">
         <h2 class="section-label">Пригласить друга</h2>
@@ -789,13 +791,9 @@
         </div>
         <div id="referral-history" class="referral-history"></div>
       </section>
-      <section id="vip-history-section" hidden>
-        <h2 class="section-label">История выпадений · VIP</h2>
-        <div id="vip-history" class="vip-history"></div>
-      </section>
       <section id="profile-background-section" class="background-section" hidden>
         <h2 class="section-label">Фон профиля</h2>
-        <p class="hint">Доступно для VIP-пользователей. Выберите фон для своего профиля.</p>
+        <p class="hint">Выбранный фон виден во всём приложении и в вашем публичном профиле.</p>
         <div id="background-selector" class="background-selector"></div>
         <button id="background-reset" class="btn btn-secondary btn-block" type="button">
           Сбросить фон
@@ -1028,6 +1026,21 @@
   </div>
 
   <div id="toast" class="toast" role="status"></div>
+
+  <dialog id="vip-history-dialog" class="info-popup-content vip-history-dialog" aria-labelledby="vip-history-title">
+    <div class="info-popup-head">
+      <h3 id="vip-history-title">История выпадений</h3>
+      <form method="dialog">
+        <button class="icon-btn" type="submit" aria-label="Закрыть" autofocus>
+          <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+        </button>
+      </form>
+    </div>
+    <div class="vip-history-scroll" tabindex="0" role="region" aria-labelledby="vip-history-title">
+      <p id="vip-history-status" role="status"></p>
+      <div id="vip-history" class="vip-history"></div>
+    </div>
+  </dialog>
 
   <div id="info-popup" class="info-popup" hidden role="dialog" aria-modal="true"
        aria-labelledby="info-popup-title" aria-describedby="info-popup-text">

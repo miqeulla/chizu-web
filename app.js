@@ -20,6 +20,7 @@
     { key: "favorites", title: "Избранное" },
   ];
   const tg = window.Telegram?.WebApp;
+  const appVersion = new URLSearchParams(location.search).get("v");
   const getInitData = () => window.Telegram?.WebApp?.initData || "";
 
   // Запрещаем масштабирование (pinch/double-tap) и перетаскивание картинок.
@@ -71,6 +72,7 @@
     publicPlayer: null, publicInventoryPage: 0,
     publicInventoryLoading: false, publicInventoryIds: new Set(),
     availableBackgrounds: [],
+    backgroundCatalogRequest: null, backgroundSaving: false, backgroundSaveVersion: 0,
   };
   const el = (id) => document.getElementById(id);
   const albums = { series: null, page: 1, listPage: 1, version: 0 };
@@ -285,7 +287,7 @@
   function syncBackButton() {
     const open = !el("sheet").hidden || !el("drop-overlay").hidden ||
       !el("case-overlay").hidden || !el("frame-roulette").hidden || !el("info-popup").hidden || !el("shop-dialog").hidden ||
-      state.activePage === "player" || state.activePage === "showcases";
+      el("vip-history-dialog").open || state.activePage === "player" || state.activePage === "showcases";
     if (!tg?.BackButton) return;
     try {
       if (open) tg.BackButton.show();
@@ -296,6 +298,7 @@
   function showPage(name, { loadShop = true } = {}) {
     haptic("light");
     state.activePage = name;
+    syncAppBackground();
     document.querySelectorAll(".page-view").forEach((page) => {
       page.hidden = page.id !== `${name}-page`;
     });
@@ -500,6 +503,8 @@
     if (imagePromise) return imagePromise;
     const imageQuery = new URLSearchParams();
     imageQuery.set("live_frame", "1");
+    imageQuery.set("upgrade", card.upgrade_level || 0);
+    if (appVersion) imageQuery.set("v", appVersion);
     if (tradeToken) imageQuery.set("trade", tradeToken);
     if (frameStyle) imageQuery.set("frame", frameStyle);
     const queryString = imageQuery.toString();
@@ -517,7 +522,7 @@
     return imagePromise;
   }
 
-  function cardButton(card, selected, disabled, onClick, tradeToken = state.tradeToken) {
+  function cardButton(card, selected, disabled, onClick, tradeToken = state.tradeToken, previousImageUrl) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = `card ${selected ? "selected" : ""} ${disabled && card.lock_reason ? "locked" : ""} ${rarityClass(card.rarity)}`;
@@ -529,7 +534,7 @@
     const image = document.createElement("img");
     image.alt = "";
     image.loading = "lazy";
-    image.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 3'%3E%3Crect width='2' height='3' fill='%23181427'/%3E%3C/svg%3E";
+    image.src = previousImageUrl || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 3'%3E%3Crect width='2' height='3' fill='%23181427'/%3E%3C/svg%3E";
     button.append(image);
     if (card.rarity === "mythical") {
       const tint = document.createElement("span");
@@ -542,10 +547,13 @@
     const frameFx = frameEffects(card.frame_effect, card.rarity, card.frame_rarity,
       card.frame_accent, card.frame_ornament_url, card.frame_theme);
     if (frameFx) button.append(frameFx);
-    if (card.upgrade_level >= 2) {
+    if (card.upgrade_level > 0) {
       const artFx = document.createElement("span");
-      artFx.className = `card-art-fx${card.upgrade_level >= 3 ? " card-art-fx--motes" : ""}`;
-      if (card.rarity === "legendary" || card.rarity === "mythical") artFx.classList.add("card-art-fx--padded");
+      artFx.className = "card-art-fx";
+      artFx.dataset.level = card.upgrade_level;
+      if (hasCustomFrame(card) || card.rarity === "legendary" || card.rarity === "mythical") {
+        artFx.classList.add("card-art-fx--padded");
+      }
       artFx.setAttribute("aria-hidden", "true");
       button.append(artFx);
     }
@@ -718,9 +726,20 @@
     el("profile-tier-badge").hidden = !isVip;
   }
 
-  async function loadProfile() {
+  async function fetchOwnProfile() {
+    const backgroundSaveVersion = state.backgroundSaveVersion;
     const profile = await api("/api/me");
+    if (backgroundSaveVersion !== state.backgroundSaveVersion) {
+      profile.profile_background = state.profile.profile_background;
+    }
     state.profile = profile;
+    if (profile.profile_background) await loadBackgrounds();
+    syncAppBackground();
+    return profile;
+  }
+
+  async function loadProfile() {
+    const profile = await fetchOwnProfile();
     el("drop-error").hidden = true;
     el("drop-retry").hidden = true;
     state.dropReadyAt = Date.now() + (profile.free_drops.next_in || 0) * 1000;
@@ -1382,11 +1401,12 @@
     syncBackButton();
   }
 
-  function openCardSheet(card) {
-    haptic("light");
+  function openCardSheet(card, { revealUpgrade = false, previousImageUrl } = {}) {
+    if (!revealUpgrade) haptic("light");
     const body = document.createElement("div");
-    const preview = cardButton(card, false, false, () => {}, "");
+    const preview = cardButton(card, false, false, null, "", previousImageUrl);
     preview.classList.add("sheet-card");
+    body.classList.toggle("card-upgrade-complete", revealUpgrade);
     preview.disabled = true;
     const actions = document.createElement("div");
     actions.className = "sheet-actions";
@@ -1462,7 +1482,7 @@
       const upgrade = document.createElement("button");
       upgrade.type = "button";
       upgrade.className = "btn btn-secondary btn-block";
-      upgrade.textContent = `${upgradeEffect?.title || "Улучшить эффект"} · ${upgradePrice} пыли`;
+      upgrade.textContent = `Улучшить: ${upgradeEffect?.title || "новый эффект"} · ${upgradePrice} пыли`;
       upgrade.disabled = Boolean(card.lock_reason) || state.balance < upgradePrice;
       upgrade.addEventListener("click", () => upgradeCard(card, upgrade, upgradePrice));
       actions.append(upgrade);
@@ -1485,18 +1505,6 @@
     setCrystals(shop.crystals);
     setBalance(shop.balance);
     return state.shopFrames;
-  }
-
-  function invalidateCardImages(cardId) {
-    for (const [key, url] of state.imageUrls) {
-      if (key.startsWith(`${cardId}:`)) {
-        URL.revokeObjectURL(url);
-        state.imageUrls.delete(key);
-      }
-    }
-    for (const key of state.imagePromises.keys()) {
-      if (key.startsWith(`${cardId}:`)) state.imagePromises.delete(key);
-    }
   }
 
   function applyCardUpdate(updated) {
@@ -1947,24 +1955,36 @@
     if (state.economyBusy) return;
     state.economyBusy = true;
     button.disabled = true;
+    const label = button.textContent;
     try {
       const effect = state.profile?.economy?.upgrade_effects?.[card.upgrade_level || 0];
       if (!await showShopDialog({ title: "Эффект иллюстрации", item: effect?.title || card.name,
         description: `${effect?.description || "Улучшение визуального эффекта."} Меняется только иллюстрация. Эффект передаётся с картой; при распылении стоимость улучшения не возвращается.`,
         art: "frame", price, currency: "dust" })) return;
+      button.textContent = "Улучшаем карту…";
+      const previewImage = button.closest("#sheet-body")?.querySelector(".sheet-card > img");
       const result = await api(`/api/cards/${card.id}/upgrade`, { method: "POST",
         body: JSON.stringify({ expected_level: card.upgrade_level || 0 }) });
       setBalance(result.balance);
-      invalidateCardImages(card.id);
       applyCardUpdate(result.card);
+      if (button.isConnected && !el("sheet").hidden) {
+        openCardSheet(result.card, {
+          revealUpgrade: true,
+          previousImageUrl: previewImage?.currentSrc,
+        });
+      }
       renderHome();
       renderFavorites();
       if (state.activePage === "collection") renderCollection();
-      openCardSheet(result.card);
       showNotice(`Добавлен эффект: ${effect?.title || result.upgrade_level}.`);
       haptic("success");
     } catch (error) { showError(error); }
-    finally { state.economyBusy = false; button.disabled = Boolean(card.lock_reason) || state.balance < price; renderEconomyStatus(); }
+    finally {
+      state.economyBusy = false;
+      button.textContent = label;
+      button.disabled = Boolean(card.lock_reason) || state.balance < price;
+      renderEconomyStatus();
+    }
   }
 
   function renderCaseProgress() {
@@ -2109,7 +2129,7 @@
 
   async function loadAccount() {
     const [profile, listings, transfers, favorites, rare, epic, legendary, mythical, referrals] = await Promise.all([
-      api("/api/me"), api("/api/listings"), api("/api/transfers"),
+      fetchOwnProfile(), api("/api/listings"), api("/api/transfers"),
       api("/api/favorites"),
       api("/api/inventory?rarity=rare&page=1"),
       api("/api/inventory?rarity=epic&page=1"),
@@ -2117,7 +2137,6 @@
       api("/api/inventory?rarity=mythical&page=1"),
       api("/api/referrals"),
     ]);
-    state.profile = profile;
     state.ownedCardCount = profile.card_count;
     state.favoriteLimit = profile.favorite_limit;
     state.favorites = favorites.items;
@@ -2145,17 +2164,11 @@
       "privacy-trades": "show_trades",
     }).forEach(([id, key]) => { el(id).checked = profile.privacy[key]; });
     renderReferrals(referrals);
-    if (profile.vip.active) {
-      const history = await api("/api/vip/history");
-      renderVipHistory(history.items);
-    } else {
-      el("vip-history-section").hidden = true;
-    }
     const bgSection = el("profile-background-section");
     const isVip = profile.vip.active;
     bgSection.hidden = !isVip;
     if (isVip) {
-      await renderBackgroundSelector(profile.profile_background);
+      await renderBackgroundSelector();
     }
     renderFavorites();
     renderAccountList("my-listings", listings.items, (listing) => {
@@ -2186,28 +2199,63 @@
     }, "Активных передач нет.");
   }
 
-  async function loadBackgrounds() {
-    if (state.availableBackgrounds.length) return state.availableBackgrounds;
+  function loadBackgrounds() {
+    if (!state.backgroundCatalogRequest) {
+      state.backgroundCatalogRequest = fetch(new URL("static/backgrounds/backgrounds.json", staticBase))
+        .then(async (res) => {
+          if (!res.ok) throw new Error(`Не удалось загрузить фоны (${res.status}).`);
+          const backgrounds = await res.json();
+          state.availableBackgrounds = backgrounds;
+          return backgrounds;
+        })
+        .catch(() => {
+          state.backgroundCatalogRequest = null;
+          return [];
+        });
+    }
+    return state.backgroundCatalogRequest;
+  }
+
+  function backgroundImageUrl(background) {
+    return new URL(`static/backgrounds/${background.preview || `${background.key}.jpg`}`, staticBase).href;
+  }
+
+  function syncAppBackground() {
+    const profile = state.activePage === "player" ? state.publicPlayer : state.profile;
+    const background = state.availableBackgrounds.find((item) => item.key === profile?.profile_background);
+    const style = document.body.style;
+    if (background) style.setProperty("--profile-background-image", `url("${backgroundImageUrl(background)}")`);
+    else style.removeProperty("--profile-background-image");
+  }
+
+  async function saveProfileBackground(key) {
+    if (state.backgroundSaving) return;
+    state.backgroundSaving = true;
     try {
-      const res = await fetch(new URL("static/backgrounds/backgrounds.json", staticBase));
-      if (!res.ok) return [];
-      state.availableBackgrounds = await res.json();
-      return state.availableBackgrounds;
-    } catch (_error) {
-      return [];
+      const { profile_background: savedKey } = await api("/api/profile/background", {
+        method: "POST",
+        body: JSON.stringify({ background_key: key }),
+      });
+      state.backgroundSaveVersion += 1;
+      state.profile.profile_background = savedKey;
+      syncAppBackground();
+      el("background-selector").querySelectorAll(".background-option").forEach((option) => {
+        option.classList.toggle("selected", option.dataset.key === savedKey);
+      });
+      showNotice(savedKey ? "Фон профиля установлен." : "Фон сброшен.");
+    } catch (error) {
+      showError(error);
+    } finally {
+      state.backgroundSaving = false;
     }
   }
 
-  function getBackgroundPreview(key) {
-    if (!key) return null;
-    const bg = state.availableBackgrounds.find((b) => b.key === key);
-    return bg ? new URL(`static/backgrounds/${bg.preview}`, staticBase).href : null;
-  }
-
-  async function renderBackgroundSelector(currentKey) {
+  async function renderBackgroundSelector() {
     const backgrounds = await loadBackgrounds();
+    syncAppBackground();
     const container = el("background-selector");
     container.replaceChildren();
+    el("background-reset").onclick = () => saveProfileBackground(null);
     if (!backgrounds.length) {
       const empty = document.createElement("div");
       empty.className = "hint";
@@ -2223,10 +2271,9 @@
       if (bg.vip && !state.profile?.vip.active) {
         option.classList.add("locked");
       }
-      if (bg.key === currentKey) option.classList.add("selected");
+      if (bg.key === state.profile.profile_background) option.classList.add("selected");
       const img = document.createElement("img");
-      const preview = getBackgroundPreview(bg.key);
-      img.src = preview || new URL(`static/backgrounds/${bg.key}.jpg`, staticBase).href;
+      img.src = backgroundImageUrl(bg);
       img.alt = bg.title;
       img.loading = "lazy";
       const label = document.createElement("span");
@@ -2239,50 +2286,15 @@
         option.append(tag);
       }
       option.append(img, label);
-      option.addEventListener("click", async () => {
+      option.addEventListener("click", () => {
         if (option.classList.contains("locked")) {
           showNotice("Фон доступен только с активным VIP.");
           return;
         }
-        try {
-          await api("/api/profile/background", {
-            method: "POST",
-            body: JSON.stringify({ background_key: bg.key }),
-          });
-          document
-            .querySelectorAll(".background-option")
-            .forEach((o) => o.classList.remove("selected"));
-          option.classList.add("selected");
-          const preview = getBackgroundPreview(bg.key);
-          el("account-page").style.backgroundImage = preview
-            ? `url('${preview}')`
-            : "none";
-          el("account-page").style.backgroundSize = "cover";
-          el("account-page").style.backgroundPosition = "center";
-          el("account-page").style.backgroundRepeat = "no-repeat";
-          showNotice("Фон профиля установлен.");
-        } catch (error) {
-          showError(error);
-        }
+        saveProfileBackground(bg.key);
       });
       container.append(option);
     });
-    const resetBtn = el("background-reset");
-    resetBtn.onclick = async () => {
-      try {
-        await api("/api/profile/background", {
-          method: "POST",
-          body: JSON.stringify({ background_key: null }),
-        });
-        document
-          .querySelectorAll(".background-option")
-          .forEach((o) => o.classList.remove("selected"));
-        el("account-page").style.backgroundImage = "none";
-        showNotice("Фон сброшен.");
-      } catch (error) {
-        showError(error);
-      }
-    };
   }
 
   function showProfileTab(name) {
@@ -2358,11 +2370,6 @@
     state.publicInventoryPage = 0;
     state.publicInventoryLoading = false;
     state.publicInventoryIds.clear();
-    await loadBackgrounds();
-    const hero = el("player-hero");
-    const preview = getBackgroundPreview(profile.profile_background);
-    hero.style.backgroundImage = preview ? `url("${preview}")` : "";
-    hero.classList.toggle("has-background", Boolean(preview));
     el("player-name").textContent = profile.display_name;
     el("player-id").textContent = `ID ${profile.id}`;
     el("player-avatar").textContent =
@@ -2414,6 +2421,9 @@
     el("player-collection-count").textContent = showCollection
       ? `${profile.card_count} карт` : "";
     showPage("player");
+    if (profile.profile_background) {
+      loadBackgrounds().then(syncAppBackground);
+    }
     window.scrollTo({ top: 0 });
     if (showCollection) await loadPublicInventory(true);
   }
@@ -2496,18 +2506,34 @@
     });
   }
 
-  function renderVipHistory(items) {
-    const section = el("vip-history-section");
-    const container = el("vip-history");
-    section.hidden = false;
-    container.replaceChildren();
-    if (!items.length) {
-      const empty = document.createElement("p");
-      empty.className = "hint";
-      empty.textContent = "Пока нет полученных карт.";
-      container.append(empty);
-      return;
+  let vipHistoryLoading = false;
+
+  async function openVipHistory() {
+    const dialog = el("vip-history-dialog");
+    if (dialog.open) return;
+    dialog.showModal();
+    syncBackButton();
+    if (vipHistoryLoading) return;
+
+    const status = el("vip-history-status");
+    el("vip-history").replaceChildren();
+    status.textContent = "Загружаем историю…";
+    vipHistoryLoading = true;
+    try {
+      const { items } = await api("/api/vip/history");
+      if (dialog.open) {
+        renderVipHistory(items);
+        status.textContent = items.length ? "" : "Пока нет полученных карт.";
+      }
+    } catch (error) {
+      status.textContent = error.message || "Не удалось загрузить историю.";
+    } finally {
+      vipHistoryLoading = false;
     }
+  }
+
+  function renderVipHistory(items) {
+    const container = el("vip-history");
     items.forEach((item) => {
       const row = document.createElement("div");
       row.className = "vip-history-item";
@@ -3300,13 +3326,23 @@
     await dustSelected(true);
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
+    if (event.key === "Escape" && !el("vip-history-dialog").open) {
       if (!el("shop-dialog").hidden) closeShopDialog(false);
       else if (!el("info-popup").hidden) closeInfoPopup();
       else if (!el("frame-roulette").hidden) closeFrameRoulette();
       else if (!el("case-overlay").hidden) closeCaseOpening();
       else if (!el("drop-overlay").hidden) closeDropOpening();
       else if (!el("sheet").hidden) closeSheet();
+    }
+  });
+  el("vip-history-open").addEventListener("click", openVipHistory);
+  el("vip-history-dialog").addEventListener("close", syncBackButton);
+  el("vip-history-dialog").addEventListener("click", (event) => {
+    const dialog = event.currentTarget;
+    if (event.target !== dialog) return;
+    const { left, right, top, bottom } = dialog.getBoundingClientRect();
+    if (event.clientX < left || event.clientX > right || event.clientY < top || event.clientY > bottom) {
+      dialog.close();
     }
   });
   el("shop-dialog-close").addEventListener("click", () => closeShopDialog(false));
@@ -3534,7 +3570,8 @@
 
   try {
     tg?.BackButton?.onClick?.(() => {
-      if (!el("shop-dialog").hidden) closeShopDialog(false);
+      if (el("vip-history-dialog").open) el("vip-history-dialog").close();
+      else if (!el("shop-dialog").hidden) closeShopDialog(false);
       else if (!el("info-popup").hidden) closeInfoPopup();
       else if (!el("frame-roulette").hidden) closeFrameRoulette();
       else if (!el("case-overlay").hidden) closeCaseOpening();
@@ -3551,7 +3588,7 @@
     }
   });
 
-  const displayState = { items: [], draft: null, mode: "manager", returnPage: "account", managerReturnPage: "account",
+  const displayState = { items: [], draft: null, viewed: null, mode: "manager", returnPage: "account", managerReturnPage: "account",
     pickerItems: [], pickerPage: 1, pickerPages: 1, pickerVersion: 0, busy: false };
   const displayThemes = { lunar: "Лунный сад", neon: "Неоновая ночь", gold: "Золотая галерея" };
 
@@ -3731,6 +3768,7 @@
 
   async function openShowcase(token, returnPage = "account") {
     const item = await api(`/api/showcases/${encodeURIComponent(token)}`);
+    displayState.viewed = item;
     displayState.returnPage = returnPage;
     setDisplayMode("view");
     el("showcase-display").replaceChildren(renderDisplay(item));
@@ -3801,10 +3839,33 @@
     try { await navigator.clipboard.writeText(el("showcase-link").value); showNotice("Ссылка скопирована."); }
     catch { el("showcase-link").focus(); el("showcase-link").select(); }
   });
-  el("showcase-share").addEventListener("click", () => {
-    const url = `https://t.me/share/url?url=${encodeURIComponent(el("showcase-link").value)}&text=${encodeURIComponent("Моя витрина в Chizu ✦")}`;
-    if (tg?.openTelegramLink) tg.openTelegramLink(url);
-    else window.open(url, "_blank", "noopener");
+  el("showcase-share").addEventListener("click", async (event) => {
+    const item = displayState.viewed;
+    const button = event.currentTarget;
+    if (!item?.link || button.disabled) return;
+    const status = el("showcase-share-status");
+    if (!tg?.shareMessage || !tg.isVersionAtLeast?.("8.0")) {
+      status.textContent = "На этой версии Telegram отправится только ссылка. Обновите Telegram, чтобы добавить картинку.";
+      const url = `https://t.me/share/url?url=${encodeURIComponent(item.link)}&text=${encodeURIComponent("Витрина в Chizu ✦")}`;
+      if (tg?.openTelegramLink) tg.openTelegramLink(url);
+      else window.open(url, "_blank", "noopener");
+      return;
+    }
+
+    const stillViewing = () => state.activePage === "showcases" && displayState.mode === "view" &&
+      displayState.viewed === item;
+    button.disabled = true;
+    button.textContent = "Готовим картинку…";
+    status.textContent = "";
+    try {
+      const { message_id } = await api(`/api/showcases/${encodeURIComponent(item.token)}/share`, { method: "POST" });
+      if (stillViewing()) tg.shareMessage(message_id);
+    } catch (error) {
+      if (stillViewing()) status.textContent = error.message || "Не удалось подготовить витрину. Попробуйте ещё раз.";
+    } finally {
+      button.disabled = false;
+      button.textContent = "Поделиться";
+    }
   });
 
   window.ChizuLoader?.set(0.62);
