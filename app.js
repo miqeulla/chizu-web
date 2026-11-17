@@ -549,16 +549,6 @@
     const frameFx = frameEffects(card.frame_effect, card.rarity, card.frame_rarity,
       card.frame_accent, card.frame_ornament_url, card.frame_theme);
     if (frameFx) button.append(frameFx);
-    if (card.upgrade_level > 0) {
-      const artFx = document.createElement("span");
-      artFx.className = "card-art-fx";
-      artFx.dataset.level = card.upgrade_level;
-      if (hasCustomFrame(card) || card.rarity === "legendary" || card.rarity === "mythical") {
-        artFx.classList.add("card-art-fx--padded");
-      }
-      artFx.setAttribute("aria-hidden", "true");
-      button.append(artFx);
-    }
     const marks = document.createElement("span");
     marks.className = "card-marks";
     if (card.lock_reason) {
@@ -1403,12 +1393,22 @@
     syncBackButton();
   }
 
-  function openCardSheet(card, { revealUpgrade = false, previousImageUrl } = {}) {
+  function openCardSheet(card, { revealUpgrade = false, previousImageUrl, upgradeMask } = {}) {
     if (!revealUpgrade) haptic("light");
     const body = document.createElement("div");
     const preview = cardButton(card, false, false, null, "", previousImageUrl);
     preview.classList.add("sheet-card");
     body.classList.toggle("card-upgrade-complete", revealUpgrade);
+    upgradeMask?.then((url) => {
+      if (!url || !preview.isConnected || el("sheet").hidden) return;
+      const effect = document.createElement("span");
+      effect.className = "card-upgrade-effect";
+      effect.dataset.level = card.upgrade_level;
+      effect.setAttribute("aria-hidden", "true");
+      effect.style.setProperty("--upgrade-mask", `url("${url}")`);
+      effect.addEventListener("animationend", () => effect.remove(), { once: true });
+      preview.querySelector("img").after(effect);
+    });
     preview.disabled = true;
     const actions = document.createElement("div");
     actions.className = "sheet-actions";
@@ -1857,7 +1857,10 @@
     if (name === "all") loadMarket().catch(showError);
     if (name === "mine") loadMyListings().catch(showError);
     if (name === "trade") {
-      if (state.tradeToken) loadTrade().catch(showError);
+      if (state.tradeToken) {
+        render();
+        loadTrade().catch(showError);
+      }
       else loadInventory().catch(showError);
     }
     if (!initial) haptic("light");
@@ -1953,6 +1956,27 @@
     finally { state.economyBusy = false; renderEconomyStatus(); }
   }
 
+  async function loadUpgradeMask(card) {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return null;
+    const query = new URLSearchParams({ upgrade_mask: "1", frame: card.frame_style || "classic" });
+    if (appVersion) query.set("v", appVersion);
+    try {
+      const response = await fetch(`${apiBase}${card.image_url}?${query}`, {
+        headers: { Authorization: `tma ${getInitData()}` },
+      });
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      return await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } catch (_error) {
+      return null;
+    }
+  }
+
   async function upgradeCard(card, button, price) {
     if (state.economyBusy) return;
     state.economyBusy = true;
@@ -1960,6 +1984,7 @@
     const label = button.textContent;
     try {
       const effect = state.profile?.economy?.upgrade_effects?.[card.upgrade_level || 0];
+      const upgradeMask = loadUpgradeMask(card);
       if (!await showShopDialog({ title: "Эффект иллюстрации", item: effect?.title || card.name,
         description: `${effect?.description || "Улучшение визуального эффекта."} Меняется только иллюстрация. Эффект передаётся с картой; при распылении стоимость улучшения не возвращается.`,
         art: "frame", price, currency: "dust" })) return;
@@ -1973,6 +1998,8 @@
         openCardSheet(result.card, {
           revealUpgrade: true,
           previousImageUrl: previewImage?.currentSrc,
+          upgradeMask: result.card.frame_style === card.frame_style
+            ? upgradeMask : loadUpgradeMask(result.card),
         });
       }
       renderHome();
@@ -3022,68 +3049,85 @@
   }
   window.setInterval(updateAuctionCountdowns, 1000);
 
+  let tradeLoadRevision = 0;
+
+  function renderTradeCards(container, cards, emptyText) {
+    container.replaceChildren();
+    if (!cards.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty-state";
+      empty.textContent = emptyText;
+      container.append(empty);
+      return;
+    }
+    cards.forEach((card) => {
+      const item = document.createElement("div");
+      const caption = document.createElement("small");
+      const details = [card.name, card.rarity_title, `#${card.print_no}`];
+      if (card.upgrade_level) details.push(`+${card.upgrade_level}`);
+      if (hasCustomFrame(card)) details.push(card.style_title);
+      caption.textContent = details.join(" · ");
+      const preview = cardButton(card, false, true);
+      preview.disabled = true;
+      item.append(preview, caption);
+      container.append(item);
+    });
+  }
+
   function render() {
-    const ownOffer = state.trade?.viewer_is_sender;
-    const left = ownOffer
-      ? state.trade.sender_cards
-      : state.trade?.status === "accepted"
-        ? state.trade.recipient_cards : selectedCards();
-    const right = state.trade
-      ? ownOffer ? state.trade.recipient_cards : state.trade.sender_cards
+    const trade = state.trade;
+    const ownOffer = trade?.viewer_is_sender;
+    const pending = trade?.status === "pending";
+    const hasReply = trade?.recipient_id != null;
+    const opening = Boolean(state.tradeToken && !trade);
+    const canSelect = !opening && (!trade || (pending && !ownOffer && !hasReply));
+    const canConfirm = pending && ownOffer && hasReply;
+    const left = canSelect ? selectedCards()
+      : (ownOffer ? trade?.sender_cards : trade?.recipient_cards) || [];
+    const right = trade
+      ? ownOffer ? trade.recipient_cards : trade.sender_cards
       : [];
-    el("left-count").textContent = `${left.length} карт`;
-    el("right-count").textContent = `${right.length} карт`;
-    el("left-cards").replaceChildren();
-    el("right-cards").replaceChildren();
-    if (!left.length) {
-      const empty = document.createElement("div");
-      empty.className = "empty-state";
-      empty.textContent = "Выберите карты из инвентаря ниже";
-      el("left-cards").append(empty);
-    } else {
-      left.forEach((card) => el("left-cards").append(cardButton(card, true, true, () => {})));
-    }
-    if (!right.length) {
-      const empty = document.createElement("div");
-      empty.className = "empty-state";
-      empty.textContent = state.trade ? "Встречные карты не выбраны" : "Получатель добавит свои карты";
-      el("right-cards").append(empty);
-    } else {
-      right.forEach((card) => el("right-cards").append(cardButton(card, false, true, () => {})));
-    }
-    const isReceiver = state.trade && !ownOffer;
-    el("left-title").textContent = ownOffer ? "Вы предложили" : "Вы отдаёте";
-    el("right-title").textContent = ownOffer ? "Получатель предложил" : "Вы получаете";
-    el("trade-title").textContent = state.trade
-      ? ownOffer ? "Ваше предложение обмена" : `Обмен от ${state.trade.sender_name || "игрока"}`
+    el("left-count").textContent = formatCardCount(left.length);
+    el("right-count").textContent = formatCardCount(right.length);
+    renderTradeCards(el("left-cards"), left, canSelect ? "Выберите карты из инвентаря" : "Карт нет");
+    renderTradeCards(el("right-cards"), right, "Игрок ещё не предложил карты");
+    el("left-title").textContent = trade?.status === "accepted" ? "Вы отдали" : "Вы отдаёте";
+    el("right-title").textContent = trade?.status === "accepted" ? "Вы получили" : "Вы получаете";
+    el("trade-title").textContent = trade
+      ? ownOffer
+        ? hasReply ? `Обмен с игроком ${trade.recipient_name || "без имени"}` : "Ваше предложение обмена"
+        : `Обмен от ${trade.sender_name || "игрока"}`
       : "Новое предложение";
-    el("trade-state").textContent = state.trade
-      ? state.trade.status === "pending" ? "Ожидает подтверждения" : "Обмен завершён"
-      : "Выберите карты для обмена";
-    el("trade-step-1").classList.toggle("on", !state.link && !state.trade);
-    el("trade-step-2").classList.toggle("on", Boolean(state.link || ownOffer));
-    el("trade-step-3").classList.toggle("on", Boolean(isReceiver || state.trade?.status === "accepted"));
-    const inventorySection = el("inventory-section");
-    inventorySection.hidden = Boolean(ownOffer || state.trade?.status !== "pending" && state.trade);
-    el("inventory-title").textContent = isReceiver
+    const statusText = {
+      accepted: "Обмен завершён",
+      cancelled: "Обмен отменён",
+      expired: "Срок обмена истёк",
+      pending: hasReply ? (ownOffer ? "Проверьте карты и подтвердите обмен" : "Ожидаем подтверждения автора")
+        : (ownOffer ? "Ожидаем встречные карты" : "Выберите карты для ответа"),
+    };
+    el("trade-state").textContent = opening ? "Откройте или обновите предложение"
+      : statusText[trade?.status] || "Выберите карты для обмена";
+    el("inventory-section").hidden = !canSelect;
+    el("inventory-title").textContent = trade
       ? "Ваш инвентарь · добавьте встречные карты"
       : "Ваш инвентарь · выберите карты";
     const inventoryCards = state.inventory.filter((card) =>
       card.name.toLowerCase().includes(state.query) ||
       card.series.toLowerCase().includes(state.query));
     el("inventory-cards").replaceChildren();
-    if (!inventoryCards.length) {
+    if (canSelect && !inventoryCards.length) {
       const empty = document.createElement("div");
       empty.className = "empty-state";
       empty.style.gridColumn = "1 / -1";
       empty.textContent = state.inventory.length ? "По запросу ничего не найдено" : "В инвентаре нет карт";
       el("inventory-cards").append(empty);
-    } else {
+    } else if (canSelect) {
       inventoryCards.forEach((card) => {
         const selected = state.selected.has(card.id);
         el("inventory-cards").append(cardButton(
           card, selected, Boolean(card.lock_reason) || (!selected && state.selected.size >= 10),
           () => {
+            if (state.tradeSubmitting) return;
             if (state.selected.has(card.id)) state.selected.delete(card.id);
             else state.selected.set(card.id, card);
             render();
@@ -3095,26 +3139,24 @@
     el("next").disabled = state.page >= state.pages;
     const primary = el("primary");
     const cancel = el("cancel");
-    const selectedCount = state.selected.size;
-    const readyToCreate = !state.trade && selectedCount > 0;
-    const readyToAccept = isReceiver && state.trade.status === "pending" && selectedCount > 0;
-    primary.textContent = isReceiver ? "Принять обмен" : "Создать ссылку обмена";
-    primary.disabled = state.tradeSubmitting || !(readyToCreate || readyToAccept);
-    primary.hidden = Boolean(ownOffer || state.trade?.status !== "pending" && state.trade);
-    cancel.hidden = !ownOffer || state.trade.status !== "pending";
-    if (state.trade?.status === "accepted") {
-      primary.hidden = true;
-      el("hint").textContent = "Карты успешно обменены.";
-    } else if (state.trade?.status === "cancelled" || state.trade?.status === "expired") {
-      primary.hidden = true;
-      el("hint").textContent = "Это предложение больше не действует.";
-    } else {
-      el("hint").textContent = state.trade
-        ? "Выберите свои карты и подтвердите обмен. Обмен необратим."
-        : "До 10 карт с каждой стороны. Предложенные карты блокируются до ответа.";
-    }
-    el("share").classList.toggle("is-open", Boolean(state.link));
-    el("share").style.display = state.link ? "block" : "none";
+    primary.textContent = canConfirm ? "Подтвердить обмен" : trade ? "Предложить свои карты" : "Создать ссылку обмена";
+    primary.disabled = state.tradeSubmitting || !(canConfirm || (canSelect && state.selected.size > 0));
+    el("trade-primary-wrap").hidden = !(canSelect || canConfirm);
+    cancel.hidden = !(pending && (ownOffer || hasReply));
+    cancel.disabled = state.tradeSubmitting;
+    const refresh = el("refresh-trade");
+    refresh.hidden = !(opening || (pending && (ownOffer || hasReply)));
+    refresh.disabled = state.tradeSubmitting;
+    el("new-trade").hidden = !(opening || (trade && !pending));
+    el("new-trade").disabled = state.tradeSubmitting;
+    const hint = el("hint");
+    hint.hidden = !pending;
+    hint.textContent = hasReply
+      ? "Карты обеих сторон зарезервированы. До подтверждения обмен можно отменить."
+      : "Карты перейдут новым владельцам после подтверждения автора.";
+    const canShare = Boolean(state.link && pending && ownOffer && !hasReply);
+    el("share").classList.toggle("is-open", canShare);
+    el("share").style.display = canShare ? "block" : "none";
   }
 
   async function loadInventory(page = 1) {
@@ -3126,10 +3168,14 @@
     render();
   }
   async function loadTrade() {
+    const revision = ++tradeLoadRevision;
     const info = await api(`/api/trades/${encodeURIComponent(state.tradeToken)}`);
+    if (revision !== tradeLoadRevision) return;
+    const needsInventory = !state.trade && info.status === "pending"
+      && !info.viewer_is_sender && info.recipient_id == null;
     state.trade = info;
-    if (info.status === "pending" && !info.viewer_is_sender) await loadInventory(1);
-    else render();
+    render();
+    if (needsInventory) await loadInventory(1);
   }
   async function createOffer(cards) {
     const data = await api("/api/trades", {
@@ -3143,16 +3189,6 @@
     render();
     el("share-link").value = data.link;
   }
-  async function acceptOffer(token, cards) {
-    await api(`/api/trades/${encodeURIComponent(token)}/accept`, {
-      method: "POST",
-      body: JSON.stringify({ card_ids: cards.map((card) => card.id) }),
-    });
-    state.selected.clear();
-    await loadTrade();
-    haptic("success");
-  }
-
   async function claimDailyReward() {
     el("daily-button").disabled = true;
     try {
@@ -3373,28 +3409,71 @@
   el("info-popup-close").addEventListener("click", closeInfoPopup);
   el("info-popup-backdrop").addEventListener("click", closeInfoPopup);
   el("primary").addEventListener("click", async () => {
-    const cards = selectedCards();
-    if (!cards.length || state.tradeSubmitting) return;
+    if (state.tradeSubmitting || el("primary").disabled) return;
     const trade = state.trade;
     const token = state.tradeToken;
-    const warning = frameHandoffWarning(trade ? [...cards, ...trade.sender_cards] : cards);
+    const cards = selectedCards();
+    const confirming = trade?.viewer_is_sender;
+    const terms = confirming ? [...trade.sender_cards, ...trade.recipient_cards]
+      : trade ? [...cards, ...trade.sender_cards] : cards;
+    const prompt = confirming ? "Подтвердить обмен этими картами? Отменить его будет нельзя."
+      : trade ? "Отправить выбранные карты на подтверждение автора?" : "Создать ссылку обмена?";
     state.tradeSubmitting = true;
     el("primary").disabled = true;
+    el("cancel").disabled = true;
+    el("refresh-trade").disabled = true;
     try {
-      if (!await confirmAction(`${trade ? "Принять обмен? Обмен необратим." : "Создать ссылку обмена?"} ${warning}`)) return;
-      if (trade) await acceptOffer(token, cards);
-      else await createOffer(cards);
+      if (!await confirmAction(`${prompt} ${frameHandoffWarning(terms)}`)) return;
+      if (trade) {
+        const action = confirming ? "confirm" : "propose";
+        const body = confirming ? {
+          sender_card_ids: trade.sender_cards.map((card) => card.id),
+          recipient_card_ids: trade.recipient_cards.map((card) => card.id),
+        } : { card_ids: cards.map((card) => card.id) };
+        await api(`/api/trades/${encodeURIComponent(token)}/${action}`, {
+          method: "POST", body: JSON.stringify(body),
+        });
+        state.selected.clear();
+        await loadTrade();
+        haptic("success");
+      } else {
+        await createOffer(cards);
+        state.selected.clear();
+      }
     } catch (error) { showError(error); }
     finally { state.tradeSubmitting = false; render(); }
   });
   el("cancel").addEventListener("click", async () => {
+    if (state.tradeSubmitting) return;
+    state.tradeSubmitting = true;
+    render();
     try {
       await api(`/api/trades/${encodeURIComponent(state.tradeToken)}/cancel`, {
         method: "POST", body: "{}",
       });
-      state.trade.status = "cancelled";
-      render();
+      await loadTrade();
     } catch (error) { showError(error); }
+    finally { state.tradeSubmitting = false; render(); }
+  });
+  el("refresh-trade").addEventListener("click", async () => {
+    if (state.tradeSubmitting) return;
+    state.tradeSubmitting = true;
+    render();
+    try { await loadTrade(); }
+    catch (error) { showError(error); }
+    finally { state.tradeSubmitting = false; render(); }
+  });
+  el("new-trade").addEventListener("click", () => {
+    ++tradeLoadRevision;
+    state.trade = null;
+    state.tradeToken = null;
+    state.link = null;
+    state.selected.clear();
+    const url = new URL(location.href);
+    url.searchParams.delete("trade");
+    history.replaceState(history.state, "", url);
+    render();
+    loadInventory(1).catch(showError);
   });
   el("prev").addEventListener("click", () => loadInventory(state.page - 1).catch(showError));
   el("next").addEventListener("click", () => loadInventory(state.page + 1).catch(showError));

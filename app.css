@@ -1652,6 +1652,13 @@ html:has(.vip-history-dialog[open]) { overflow: hidden; }
   gap: 8px;
   margin-top: 8px;
 }
+.trade-cards small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
 .share { display: none; }
 .share.is-open { display: block; }
 .share-row { display: flex; gap: 8px; }
@@ -4743,43 +4750,34 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 .frame-roulette-award img { display: block; width: 112px; height: 168px; object-fit: contain; margin: auto; }
 #frame-roulette-result { font-size: 14px; line-height: 1.5; color: #ffe7b3; }
 
-/* Reveal the effect over the current illustration while the new image renders. */
+/* The mask uses the same framing and scale as the card bitmap. */
 .sheet.sheet--card .card-upgrade-complete .sheet-card,
 .sheet.sheet--card .card-upgrade-complete .card-frame-status,
 .sheet.sheet--card .card-upgrade-complete .sheet-actions { animation: none; }
-.card-art-fx {
+.card-upgrade-effect {
   position: absolute;
   z-index: 1;
-  inset: 2.33% 3.5% 21%;
-  overflow: hidden;
-  border-radius: 8% 8% 0 0;
+  inset: 0;
+  -webkit-mask: var(--upgrade-mask) center / cover no-repeat;
+  mask: var(--upgrade-mask) center / cover no-repeat;
+  mix-blend-mode: screen;
   pointer-events: none;
 }
-.card-art-fx--padded { inset: 5.03% 7.34% 22.64%; }
-.card-art-fx[data-level="1"] {
-  background: radial-gradient(ellipse at center, transparent 30%, #a651e45e);
-}
-.card-art-fx[data-level="2"] {
-  background: linear-gradient(124deg, #5decf855, transparent 42%, #fb87d650);
-}
-.card-art-fx[data-level="3"] {
-  background: radial-gradient(ellipse at center, transparent 36%, #ffa62856);
-}
-.card-upgrade-complete .card-art-fx::after {
+.card-upgrade-effect::after {
   content: "";
   position: absolute;
   inset: 0;
 }
-.card-upgrade-complete .card-art-fx[data-level="1"]::after {
-  background: radial-gradient(ellipse, transparent 36%, #ca78ffc0 60%, #f7d1ff 67%, transparent 73%);
+.card-upgrade-effect[data-level="1"]::after {
+  background: radial-gradient(ellipse, #bf52ff22 20%, #ce80fe9e 42%, #edc4ffd0 53%, #ac4dfb55 64%, transparent 76%);
   animation: upgrade-amethyst 1s ease-out both;
 }
-.card-upgrade-complete .card-art-fx[data-level="2"]::after {
+.card-upgrade-effect[data-level="2"]::after {
   background: linear-gradient(122deg, transparent 26%, #58f8ff80 40%, #e9ffffeb 48%,
     #c49bffba 53%, #ff94df99 59%, transparent 70%);
   animation: upgrade-prism 1.1s ease-out both;
 }
-.card-upgrade-complete .card-art-fx[data-level="3"]::after {
+.card-upgrade-effect[data-level="3"]::after {
   background:
     radial-gradient(circle at 12% 20%, #fffce3 1%, #ffd068 2%, transparent 4%),
     radial-gradient(circle at 84% 17%, #fffae2 1%, #ffb73d 2%, transparent 4%),
@@ -4806,7 +4804,7 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
   to { transform: scale(1.27); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .card-upgrade-complete .card-art-fx::after { display: none; }
+  .card-upgrade-effect { display: none; }
 }
 
 /* Each pack has a different motion language as well as a different silhouette. */

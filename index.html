@@ -537,15 +537,10 @@
         <div id="my-market-listings"></div>
       </div>
       <section id="trade-pane" hidden aria-label="Обмен картами">
-        <div class="steps">
-          <span id="trade-step-1" class="on">1. Карты</span>
-          <span id="trade-step-2">2. Ссылка</span>
-          <span id="trade-step-3">3. Ответ</span>
-        </div>
         <section class="tradebox">
           <div class="trade-head">
             <strong id="trade-title">Новое предложение</strong>
-            <span id="trade-state">Выберите карты для обмена</span>
+            <span id="trade-state" role="status">Выберите карты для обмена</span>
           </div>
           <div class="trade-layout">
             <section class="side">
@@ -569,17 +564,19 @@
           </div>
           <div id="hint" class="hint trade-status" hidden></div>
           <button id="cancel" class="btn btn-secondary btn-block" type="button" hidden>Отменить предложение</button>
+          <button id="refresh-trade" class="btn btn-secondary btn-block" type="button" hidden>Обновить статус</button>
+          <button id="new-trade" class="btn btn-secondary btn-block" type="button" hidden>Новый обмен</button>
           <div id="trade-primary-wrap" class="action-with-info">
             <button id="primary" class="btn btn-primary btn-block" type="button" disabled>Создать ссылку обмена</button>
             <button id="trade-info" class="info-trigger" type="button"
               aria-label="Информация об обмене"
               data-info-title="Обмен картами"
-              data-info-text="До 10 карт с каждой стороны. Предложенные карты блокируются до ответа.">
+              data-info-text="До 10 карт с каждой стороны. Карты зарезервированы до подтверждения автора, отмены или истечения 24 часов с создания ссылки.">
               <svg class="icon-sm" aria-hidden="true"><use href="#icon-info"></use></svg>
             </button>
           </div>
           <div id="share" class="share">
-            <p>Отправьте ссылку игроку. Карты будут обменены только после его подтверждения.</p>
+            <p>Отправьте ссылку игроку. Когда он предложит свои карты, бот пришлёт вам уведомление для проверки и подтверждения.</p>
             <div class="share-row">
               <input id="share-link" class="field" readonly>
               <button id="copy" class="btn btn-secondary" type="button">Копировать</button>
