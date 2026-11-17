@@ -79,6 +79,8 @@
   const copies = { page: 1, version: 0, selected: new Map(), maxBatch: 0, busy: false };
   const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const staticBase = new URL(/\/app\/?$/.test(location.pathname) ? "/app/static/" : "./", location.href);
+  // The API returns server-relative paths, but frame assets ship with the frontend.
+  const frameAssetUrl = (path) => new URL(path.replace(/^\/app\/static\//, ""), staticBase).href;
   document.querySelectorAll("img[data-static-src]").forEach((image) => {
     let retries = 0;
     let usedFallback = false;
@@ -415,7 +417,7 @@
         const mount = document.createElement("span");
         mount.className = "frame-fx-corner";
         const image = document.createElement("img");
-        image.src = `${apiBase}${ornamentUrl.replace('.webp', `_${corner}.webp`)}`;
+        image.src = frameAssetUrl(ornamentUrl.replace(".webp", `_${corner}.webp`));
         image.style.setProperty("--ornament-origin", ["25% 25%", "75% 25%", "25% 75%", "75% 75%"][corner]);
         image.alt = "";
         mount.append(image);
@@ -1618,7 +1620,7 @@
         thumbnail.className = "frame-preview";
         thumbnail.alt = "";
         thumbnail.loading = "lazy";
-        thumbnail.src = `${apiBase}${frame.preview_url}`;
+        thumbnail.src = frameAssetUrl(frame.preview_url);
         option.append(thumbnail);
       }
       const title = document.createElement("strong");
@@ -2738,7 +2740,7 @@
       el("case-reward-art").className = `case-reward-art case-reward-art--${art}`;
       if (art === "frame" && result.frame_preview_url) {
         const thumbnail = document.createElement("img");
-        thumbnail.src = `${apiBase}${result.frame_preview_url}`;
+        thumbnail.src = frameAssetUrl(result.frame_preview_url);
         thumbnail.alt = result.frame_title;
         el("case-reward-art").append(thumbnail);
         const fx = frameEffects(result.frame_effect, result.frame_rarity, result.frame_rarity,
@@ -2782,7 +2784,7 @@
     item.classList.toggle("is-previewed", frame.id === state.frameShopFrameId);
     const image = document.createElement("img");
     image.className = "frame-preview";
-    image.src = `${apiBase}${frame.preview_url}`;
+    image.src = frameAssetUrl(frame.preview_url);
     image.alt = frame.title;
     image.loading = "lazy";
     const info = document.createElement("div");
@@ -2826,7 +2828,7 @@
       section.className = "frame-pack";
       const cover = document.createElement("img");
       cover.className = "frame-pack-cover";
-      cover.src = `${apiBase}${pack.cover_url}`;
+      cover.src = frameAssetUrl(pack.cover_url);
       cover.alt = `Пак «${pack.title}»`;
       cover.loading = "lazy";
       const heading = document.createElement("h3");
@@ -2876,7 +2878,7 @@
       const tile = document.createElement("div");
       tile.className = "frame-roulette-tile";
       const image = document.createElement("img");
-      image.src = `${apiBase}${frame.preview_url}`;
+      image.src = frameAssetUrl(frame.preview_url);
       image.alt = "";
       const name = document.createElement("span");
       name.textContent = frame.title;
@@ -2943,7 +2945,7 @@
       catch (_error) { /* Reveal the server result even if motion is unavailable. */ }
       finally {
         const award = document.createElement("img");
-        award.src = `${apiBase}${result.frame.live_preview_url || result.frame.preview_url}`;
+        award.src = frameAssetUrl(result.frame.live_preview_url || result.frame.preview_url);
         award.alt = result.frame.title;
         el("frame-roulette-award").append(award);
         const fx = frameEffects(result.frame.effect, result.frame.rarity, result.frame.rarity,
