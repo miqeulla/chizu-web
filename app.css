@@ -1158,6 +1158,17 @@ img.frame-preview {
 .frame-item strong { font-size: 12px; }
 
 .frame-picker-body { display: grid; gap: 10px; }
+.frame-picker-body > .btn:first-child { justify-self: start; }
+.frame-picker-preview {
+  position: relative;
+  width: min(100%, 144px);
+  aspect-ratio: 2 / 3;
+  margin-inline: auto;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.frame-picker-preview > img { display: block; width: 100%; }
 #frames-pane { display: grid; gap: 10px; }
 #frames-pane[hidden] { display: none; }
 #frames-pane .hint { margin: 0; }
@@ -1179,19 +1190,17 @@ img.frame-preview {
   color: inherit;
   text-align: left;
 }
-.frame-option .frame-preview { height: 58px; }
+.frame-option .frame-preview { width: 100%; height: 58px; object-fit: contain; }
 .frame-option strong {
-  overflow: hidden;
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 .frame-option .hint { font-size: 10px; line-height: 1.3; }
 .frame-option.selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent) inset;
 }
-.frame-option:disabled { cursor: default; opacity: 1; }
+.frame-option:disabled { cursor: default; opacity: .65; }
 .frame-option:not(:disabled):active { transform: scale(.97); }
 .frame-option[data-rarity="rare"] { --frame-color: var(--rarity-rare); }
 .frame-option[data-rarity="epic"] { --frame-color: var(--rarity-epic); }
@@ -3149,7 +3158,7 @@ body:has(.sheet.sheet--card) .sheet-backdrop {
 .sheet.sheet--card #sheet-body {
   display: grid;
   flex: 1;
-  grid-template-rows: minmax(0, 1fr) auto auto;
+  grid-template-rows: minmax(min-content, 1fr) auto auto auto auto;
   align-items: center;
   justify-items: center;
   gap: 10px;
@@ -3180,6 +3189,12 @@ body:has(.sheet.sheet--card) .sheet-backdrop {
   margin: 0;
   pointer-events: auto;
   animation: card-focus-actions .45s cubic-bezier(.2, .9, .25, 1) .14s both;
+}
+
+.sheet.sheet--card .card-frame-manage {
+  min-height: 44px;
+  max-width: 430px;
+  pointer-events: auto;
 }
 
 .sheet.sheet--card .sheet-actions .btn { min-height: 44px; }
@@ -3246,6 +3261,7 @@ body:has(#home-page:not([hidden])) #drop-button { color: #272333; background: li
 .drop-retry { display: block; margin: 0 0 10px; border: 0; padding: 4px 0; color: #ffe2a4; background: none; text-decoration: underline; }
 .drop-retry[hidden], .drop-error[hidden] { display: none; }
 .ticket-panel { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 9px; padding: 12px 14px; border-radius: 6px 16px 6px 16px; text-align: left; }
+.ticket-panel[hidden] { display: none; }
 .ticket-panel div { display: grid; gap: 3px; min-width: 0; }
 .ticket-panel strong { color: #f7efff; font-size: 16px; }
 .ticket-panel small { color: #b8adc4; font-size: 11px; }
@@ -3723,9 +3739,6 @@ body:has(#home-page:not([hidden])) .main-nav button[data-page="home"].active .na
   .main-nav button[data-page="home"] .nav-fab, body:has(#home-page:not([hidden])) .main-nav button[data-page="home"] .nav-fab,
   .main-nav button[data-page="home"] .nav-fab .game-icon { width: 38px; }
 }
-.ticket-use-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding-top: 12px; border-top: 1px solid #d398fa55; }
-.ticket-use-row span { color: #f0d7ff; font-size: 12px; }
-.ticket-use-row .btn { min-height: 40px; padding: 0 12px; font-size: 12px; }
 
 /* Иконки без фонового свечения. */
 .game-icon-collection { --game-icon: url("game-icon-collection-clear.webp"); }
@@ -3793,7 +3806,7 @@ body:has(#home-page:not([hidden])) .card-back.card-back-illustrated {
   --ui-text: #fff6ff;
   --ui-subtle: #dec9ed;
 }
-#home-page .stock-panel, #home-page .daily-banner,
+#home-page .stock-panel, #home-page .ticket-panel, #home-page .daily-banner,
 body:has(#home-page:not([hidden])) .daily-banner,
 .listing, .side, .vip-status-card, .referral-panel, .privacy-panel,
 .player-result, .stat, .roll-package, .frame-item, .soon-card,
@@ -3849,7 +3862,7 @@ body:has(#home-page:not([hidden])) .daily-banner p, .roll-package strong { color
   background: #21103de8; box-shadow: inset 0 1px #fff1;
 }
 .search-row input::placeholder, .field::placeholder { color: #c7b2d5; }
-.collection-meta, .steps, .trade-head, .referral-stats span, .ticket-use-row {
+.collection-meta, .steps, .trade-head, .referral-stats span {
   border-color: #b692c965; background-color: #271443c7; color: var(--ui-subtle);
 }
 .collection-meta, .steps, .trade-head { background-image: linear-gradient(110deg, #493065bd, #261340da); }
@@ -3877,7 +3890,6 @@ body:has(#home-page:not([hidden])) .section-label::before, .page-view:not(#home-
 .chip, body:has(#home-page:not([hidden])) .chip { border-color: #d7a9b773; background: linear-gradient(140deg, #40255ee8, #21113ee8); box-shadow: inset 0 1px #fff2; }
 .main-nav, body:has(#home-page:not([hidden])) .main-nav { border-color: #d8add18a; background: linear-gradient(110deg, #34204ceF, #1f103beF 52%, #34204ceF); box-shadow: inset 0 1px #fff3, 0 8px 24px #09021c99; }
 .sheet, .case-opening-card { border-color: #dbaddf99; background: linear-gradient(155deg, #493061fa, #211038fa); }
-.ticket-use-row { background: transparent; }
 @media (max-width: 340px) { .page-banner { padding-right: 31%; } .page-banner::after { width: 25vw; right: 6px; } }
 
 /* Типографика лунного сада: выразительные заголовки и читаемый интерфейс. */
@@ -4042,7 +4054,12 @@ body:has(#home-page:not([hidden])) .topbar-brand { font-family: "Chizu Display",
 }
 
 /* Коллекция: поиск, фильтры и карточная галерея. */
-#collection-page .page-banner { min-height: 108px; margin-bottom: 12px; }
+#collection-page { --collection-secondary-text: #efe0f6; }
+#collection-page .page-banner { min-height: 64px; margin-bottom: 8px; padding: 10px 68px 10px 16px; }
+#collection-page .page-banner h1 { margin: 0; }
+#collection-page .page-banner::after { right: 12px; width: 46px; }
+#collection-page [hidden] { display: none !important; }
+#collection-page .hint, #collection-page .collection-help { color: var(--collection-secondary-text); font-size: 13px; line-height: 1.45; }
 #collection-page .collection-tools {
   display: grid; gap: 12px; margin: 0 0 15px; padding: 13px;
   border: 1px solid #d8a4e985; border-radius: 16px;
@@ -4052,11 +4069,27 @@ body:has(#home-page:not([hidden])) .topbar-brand { font-family: "Chizu Display",
 #collection-page .collection-search-row { position: relative; align-items: center; gap: 8px; margin: 0; }
 #collection-page .collection-search-icon { position: absolute; left: 12px; width: 17px; height: 17px; color: #dcbbee; pointer-events: none; }
 #collection-page #collection-search { padding-left: 38px; }
-#collection-page #collection-menu { flex: 0 0 44px; color: #f2d2ee; }
+#collection-page #collection-search::placeholder { color: var(--collection-secondary-text); }
+#collection-filters summary, .card-more-actions summary { cursor: pointer; padding: 10px 0; }
+#collection-filters .collection-filter-group + .collection-filter-group { margin-top: 10px; }
+#collection-received { margin-bottom: 15px; }
+#collection-more { margin-top: 10px; }
+.collection-list { display: grid; gap: 8px; }
+.collection-row { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; text-align: left; }
+button.collection-row { justify-content: stretch; justify-items: start; width: 100%; padding: 9px 12px; }
+.collection-row .hint { margin: 0; }
+.collection-row progress { width: 100%; height: 7px; accent-color: var(--accent); }
+.collection-copy { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-btn); background: var(--surface); }
+.collection-copy input { flex: 0 0 auto; width: 18px; height: 18px; accent-color: var(--accent); }
+.collection-pages { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 12px 0; }
+#collection-page #collection-copy-actions { margin: 12px 0 0; }
+#collection-copy-selection { margin: 0; }
+#collection-album-links { margin-top: 12px; }
 #collection-page .collection-filter-group { display: grid; gap: 7px; min-width: 0; }
-#collection-page .collection-filter-label { color: #f3d4ac; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+#collection-page .collection-filter-label { color: #f3d4ac; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 #collection-page .chip-row { flex-wrap: wrap; gap: 6px; overflow-x: visible; padding-bottom: 2px; }
-#collection-page .filter-chip { min-height: 34px; padding: 0 11px; font-size: 11px; white-space: nowrap; }
+#collection-page .filter-chip { min-height: 34px; padding: 0 11px; font-size: 12px; white-space: nowrap; }
+#collection-page .filter-chip:not(.active), #collection-page > .tabs button:not(.active) { color: var(--collection-secondary-text); }
 #collection-page .filter-chip.active { border-color: #f1ca95a6; color: #fff9f1; background: linear-gradient(130deg, #9155b5, #69318d); }
 #collection-page .collection-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 10px; }
 #collection-page .collection-list-heading .section-label { min-width: 0; margin: 0; }
@@ -4074,7 +4107,7 @@ body:has(#home-page:not([hidden])) .topbar-brand { font-family: "Chizu Display",
 @media (max-width: 350px) {
   #collection-page .collection-tools { padding: 11px; }
   #collection-page .collection-list-heading .section-label { font-size: 19px; }
-  #collection-page .collection-meta { padding: 4px 8px; font-size: 10px; }
+  #collection-page .collection-meta { padding: 4px 8px; }
 }
 
 /* Маркет: лоты и обмен в едином стиле коллекции. */
@@ -4178,7 +4211,6 @@ body:has(#home-page:not([hidden])) .topbar-brand { font-family: "Chizu Display",
 #crystals-page .action-with-info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 #crystals-page .action-with-info > .btn { flex: 1 1 auto; min-width: 0; width: auto; }
 #crystals-page .action-with-info > .hint { flex-basis: 100%; }
-#crystals-page .ticket-use-row { gap: 10px; }
 #crystals-page .frame-item {
   grid-template-columns: 76px minmax(0, 1fr); grid-template-rows: auto auto;
   align-items: center; gap: 8px 12px; padding: 10px;
@@ -4525,13 +4557,15 @@ body:has(#home-page:not([hidden])) .topbar-brand { font-family: "Chizu Display",
 .drop-followup .btn[hidden] { display: none; }
 
 /* Collection controls and card actions */
-.collection-duplicates { display: flex; align-items: center; gap: 8px; color: #f0dff4; font-size: 13px; }
-.collection-duplicates input { accent-color: #bc83dc; width: 18px; height: 18px; }
-.collection-help { margin: 8px 0 12px; color: #cdbce4; font-size: 12px; line-height: 1.45; }
+.collection-help { margin: 8px 0 12px; }
 .collection-select { min-height: 36px; font-size: 12px; }
 .sheet.sheet--card .sheet-actions { grid-template-columns: 1fr 1fr; }
 .sheet.sheet--card .sheet-actions .btn { padding-inline: 8px; font-size: 12px; }
 .sheet.sheet--card .sheet-actions .btn-danger { grid-column: 1 / -1; }
+.sheet.sheet--card .card-more-actions { width: 100%; max-width: 430px; pointer-events: auto; }
+.sheet.sheet--card .card-more-actions summary { text-align: center; }
+.sheet.sheet--card .card-more-actions .sheet-actions { max-height: min(30dvh, 180px); overflow-y: auto; }
+.sheet.sheet--card .card-more-actions:not([open]) .sheet-actions { display: none; }
 
 .sheet.sheet--card #sheet-body > div { display: contents; }
 
@@ -4647,19 +4681,16 @@ body:has(#home-page:not([hidden])) .topbar-brand { font-family: "Chizu Display",
 .frame-live-fx[data-theme="gothic"] .frame-fx-corner > img { animation-name: frame-ornament-crystal; }
 .frame-live-fx[data-theme="ocean"] .frame-fx-corner > img { animation-name: frame-ornament-wave; animation-duration: 4s; }
 .sheet-card .frame-fx-corner > img, .card:hover .frame-fx-corner > img,
-.card:focus-visible .frame-fx-corner > img, .frame-option:hover .frame-fx-corner > img,
-.frame-option:focus-visible .frame-fx-corner > img,
+.card:focus-visible .frame-fx-corner > img, .sheet:not([hidden]) .frame-picker-preview .frame-fx-corner > img,
 #frames-pane:not([hidden]) .frame-shop-visual .frame-fx-corner > img,
 .case-overlay.is-revealed .frame-fx-corner > img,
 .frame-roulette-overlay:not([hidden]) .frame-fx-corner > img { animation-play-state: running; }
 .page-hidden .frame-fx-corner > img { animation-play-state: paused !important; }
-.frame-option-visual { position: relative; display: block; width: 80px; max-width: 100%; aspect-ratio: 2 / 3; margin-inline: auto; border-radius: 9px; overflow: hidden; }
-.frame-option .frame-option-visual > .frame-preview { display: block; border: 0; width: 100%; height: 100%; object-fit: fill; }
 .frame-roulette-award { position: relative; width: 112px; margin-inline: auto; border-radius: 9px; }
 .frame-roulette-overlay:not([hidden]) .frame-live-fx::before,
 .frame-roulette-overlay:not([hidden]) .frame-live-fx::after,
-.frame-option:hover .frame-live-fx::before, .frame-option:hover .frame-live-fx::after,
-.frame-option:focus-visible .frame-live-fx::before, .frame-option:focus-visible .frame-live-fx::after { animation-play-state: running; }
+.sheet:not([hidden]) .frame-picker-preview .frame-live-fx::before,
+.sheet:not([hidden]) .frame-picker-preview .frame-live-fx::after { animation-play-state: running; }
 @keyframes frame-energy-turn { to { --frame-energy-angle: 360deg; } }
 @keyframes frame-ornament-wing { from { transform: rotate(-5deg) scale(.97); } to { transform: rotate(5deg) scale(1.04); } }
 @keyframes frame-ornament-orbit { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

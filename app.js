@@ -14,6 +14,11 @@
     { key: "old", title: "Старые" },
     { key: "rarity", title: "Редкость" },
   ];
+  const COLLECTION_FILTERS = [
+    { key: "", title: "Все карты" },
+    { key: "recent", title: "За 7 дней" },
+    { key: "favorites", title: "Избранное" },
+  ];
   const tg = window.Telegram?.WebApp;
   const getInitData = () => window.Telegram?.WebApp?.initData || "";
 
@@ -47,16 +52,19 @@
     selected: new Map(), collectionSelected: new Map(),
     query: "", link: "", imageUrls: new Map(), imagePromises: new Map(),
     collectionPage: 1, collectionPages: 1, collectionQuery: "",
-    collectionRarity: "", collectionSort: "new", collectionDuplicates: false, profile: null,
+    collectionRarity: "", collectionSort: "new", collectionFilter: "", profile: null,
+    collectionMode: "cards", collectionVersion: 0, receivedCards: [],
     marketItems: [], activePage: "home", transferLink: "",
     homeCards: [], collectionTotal: 0, ownedCardCount: 0,
     favorites: [], favoriteLimit: 3, shopFrames: [], framePacks: [], packOpening: false,
     frameShopCards: [], frameShopPage: 1, frameShopPages: 1,
     frameShopCardId: null, frameShopFrameId: null, framePreviewVersion: 0,
+    frameShopPinnedCard: null, frameShopCardsVersion: 0,
+    tradeSubmitting: false, transferSubmitting: false, listingSubmitting: false,
     caseCatalog: null, caseOpening: false,
     economyBusy: false, craftVersion: 0, craftAfter: null,
     referralLink: "",
-    collectionItems: [], collectionLoading: false, collectionReloadPending: false, selectMode: false,
+    collectionItems: [], collectionLoading: false, selectMode: false,
     marketTab: "all", shopTab: "rolls", lastDropCard: null,
     dropStartedAt: 0, dropStageTimer: 0, dropTimer: 0, dropReadyAt: 0, dropBusy: false,
     mainClick: null, overlayOpen: false,
@@ -65,6 +73,8 @@
     availableBackgrounds: [],
   };
   const el = (id) => document.getElementById(id);
+  const albums = { series: null, page: 1, listPage: 1, version: 0 };
+  const copies = { page: 1, version: 0, selected: new Map(), maxBatch: 0, busy: false };
   const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const staticBase = new URL(/\/app\/?$/.test(location.pathname) ? "/app/static/" : "./", location.href);
   document.querySelectorAll("img[data-static-src]").forEach((image) => {
@@ -98,6 +108,13 @@
     return `${count} ${noun}`;
   }
   const selectedCards = () => [...state.selected.values()];
+  const hasCustomFrame = (card) => Boolean(card.frame_style && card.frame_style !== "classic");
+  const frameHandoffWarning = (cards) => {
+    const framed = cards.filter(hasCustomFrame);
+    return framed.length
+      ? `Особых рамок на картах: ${framed.length}. Они перейдут новым владельцам вместе с картами.`
+      : "Любая надетая особая рамка переходит новому владельцу вместе с картой.";
+  };
   const rarityClass = (rarity) => `rarity-${rarity}`;
 
   try {
@@ -193,8 +210,11 @@
   }
 
   function confirmAction(text) {
-    if (tg?.showConfirm) {
-      return new Promise((resolve) => tg.showConfirm(text, resolve));
+    if (getInitData() && tg?.showConfirm) {
+      return new Promise((resolve) => {
+        try { tg.showConfirm(text, resolve); }
+        catch { resolve(window.confirm(text)); }
+      });
     }
     return Promise.resolve(window.confirm(text));
   }
@@ -273,7 +293,7 @@
     } catch (_error) { /* old clients */ }
   }
 
-  function showPage(name) {
+  function showPage(name, { loadShop = true } = {}) {
     haptic("light");
     state.activePage = name;
     document.querySelectorAll(".page-view").forEach((page) => {
@@ -282,9 +302,10 @@
     document.querySelectorAll(".main-nav button").forEach((button) => {
       button.classList.toggle("active", button.dataset.page === name);
     });
-    if (name === "collection") loadCollection(1, true).catch(showError);
+    if (name === "collection") refreshCollection();
+    renderCollectionSelection();
     if (name === "account") loadAccount().catch(showError);
-    if (name === "crystals" && state.shopTab === "frames") {
+    if (name === "crystals" && state.shopTab === "frames" && loadShop) {
       loadFrameShop().catch(showError);
     }
     if (name === "crystals" && state.shopTab === "cases") {
@@ -327,6 +348,8 @@
     state.rolls = balance;
     el("roll-balance").textContent = balance;
     el("extra-roll-count").textContent = balance;
+    el("home-ticket-panel").hidden = balance < 1;
+    el("home-ticket-count").textContent = `${balance} ${ticketWord(balance)}`;
     updateDropButton();
   }
   function ticketWord(amount) {
@@ -635,7 +658,6 @@
     const free = stock?.available ?? 0;
     const maximum = stock?.maximum ?? 5;
     el("free-drop-count").textContent = stock ? `${free} / ${maximum}` : `— / ${maximum}`;
-    el("home-ticket-count").textContent = state.profile ? `${state.rolls} ${ticketWord(state.rolls)}` : "—";
     el("drop-slots").querySelectorAll("i").forEach((slot, index) => {
       slot.classList.toggle("filled", index < free);
     });
@@ -722,10 +744,8 @@
       : "Награда уже получена. После полуночи по Москве.";
     updateDropTimer();
     const inventory = await api("/api/inventory?page=1");
-    state.collectionTotal = inventory.total;
     state.ownedCardCount = inventory.total;
     el("card-count").textContent = state.ownedCardCount;
-    el("collection-count").textContent = formatCardCount(inventory.total);
     state.homeCards = inventory.items.slice(0, 10);
     renderHome();
     updateDropTimer();
@@ -845,8 +865,7 @@
     results.replaceChildren(...cards.map((card) => {
       const item = document.createElement("div");
       item.className = "drop-result-item";
-      const button = cardButton(card, false, false, null, "");
-      button.setAttribute("aria-disabled", "true");
+      const button = cardButton(card, false, false, () => openDropCollection(cards, card), "");
       const label = document.createElement("span");
       label.textContent = `${card.name} · ${card.rarity_title}`;
       item.append(button, label);
@@ -860,9 +879,21 @@
     el("drop-close").hidden = false;
     el("drop-followup").hidden = false;
     el("drop-dust").hidden = cards.length !== 1;
+    el("drop-to-collection").onclick = () => openDropCollection(cards, cards.length === 1 ? cards[0] : null);
     if (cards.length === 1) el("drop-dust").textContent = `Распылить за ${cards[0].dust_value} пыли`;
     el("drop-close").focus();
     haptic("success");
+  }
+
+  function openDropCollection(cards, card) {
+    closeDropOpening();
+    state.receivedCards = cards.length > 1 ? cards : [];
+    state.collectionMode = "cards";
+    state.collectionSelected.clear();
+    state.selectMode = false;
+    showPage("collection");
+    window.scrollTo({ top: 0 });
+    if (card) openCardSheet(card);
   }
 
   async function presentDrop(result, isFreeDrop) {
@@ -879,7 +910,6 @@
     state.lastDropCard = cards.length === 1 ? cards[0] : null;
     state.ownedCardCount += cards.length;
     el("card-count").textContent = state.ownedCardCount;
-    state.collectionTotal += cards.length;
     state.homeCards = [...cards, ...state.homeCards.filter((item) => !cards.some((newCard) => newCard.id === item.id))].slice(0, 10);
     renderHome();
     clearTimeout(state.dropStageTimer);
@@ -963,9 +993,14 @@
       const empty = document.createElement("div");
       empty.className = "empty-state";
       empty.style.gridColumn = "1 / -1";
-      empty.textContent = state.collectionQuery || state.collectionRarity || state.collectionDuplicates
-        ? "По этому запросу карт нет. Попробуйте изменить поиск или редкость."
-        : "Коллекция пока пуста.";
+      const filtered = state.collectionQuery || state.collectionRarity;
+      empty.textContent = filtered ? "Карты не найдены. Измените поиск или сбросьте фильтры."
+        : state.collectionFilter === "favorites" ? "Избранных карт пока нет. Откройте карту и нажмите звёздочку."
+        : state.collectionFilter === "recent" ? "За последние 7 дней новых карт нет."
+        : "Коллекция пока пуста. Откройте первую карту на главной.";
+      if (!filtered && !state.collectionFilter) {
+        empty.append(displayButton("На главную", () => showPage("home")));
+      }
       container.append(empty);
       return;
     }
@@ -973,7 +1008,7 @@
     state.collectionItems.forEach((card) => {
       const selected = state.collectionSelected.has(card.id);
       container.append(cardButton(card, selected, Boolean(card.lock_reason), (event) => {
-        if (event.longPress) {
+        if (event.longPress && !state.selectMode) {
           state.selectMode = true;
           state.collectionSelected.set(card.id, card);
           renderCollectionSelection();
@@ -983,6 +1018,7 @@
         if (state.selectMode) {
           if (state.collectionSelected.has(card.id)) state.collectionSelected.delete(card.id);
           else if (state.collectionSelected.size < 10) state.collectionSelected.set(card.id, card);
+          else showToast("Можно выбрать до 10 карт.");
           if (!state.collectionSelected.size) state.selectMode = false;
           renderCollectionSelection();
           renderCollection();
@@ -994,13 +1030,15 @@
   }
 
   async function loadCollection(page = 1, reset = false) {
-    if (state.collectionLoading) {
-      if (reset) state.collectionReloadPending = true;
-      return;
-    }
+    if (state.collectionLoading && !reset) return;
+    const version = ++state.collectionVersion;
     state.collectionLoading = true;
+    el("collection-more").disabled = true;
     if (reset) {
       state.collectionItems = [];
+      el("collection-count").textContent = "Загрузка…";
+      el("collection-page-label").textContent = "";
+      el("collection-more").hidden = true;
       const container = el("collection-cards");
       container.replaceChildren();
       for (let index = 0; index < 6; index += 1) {
@@ -1015,27 +1053,36 @@
     });
     if (state.collectionRarity) params.set("rarity", state.collectionRarity);
     if (state.collectionQuery) params.set("q", state.collectionQuery);
-    if (state.collectionDuplicates) params.set("duplicates", "1");
+    if (state.collectionFilter) params.set(state.collectionFilter, "1");
     try {
       const [data, favorites] = await Promise.all([
-        api(`/api/inventory?${params}`), api("/api/favorites"),
+        api(`/api/inventory?${params}`), reset ? api("/api/favorites") : null,
       ]);
-      state.favorites = favorites.items;
-      state.favoriteLimit = favorites.limit;
+      if (version !== state.collectionVersion) return;
+      if (favorites) {
+        state.favorites = favorites.items;
+        state.favoriteLimit = favorites.limit;
+      }
       state.collectionPage = data.page;
       state.collectionPages = data.pages;
       state.collectionTotal = data.total;
       setBalance(data.balance);
-      el("collection-prev").disabled = data.page <= 1;
-      el("collection-next").disabled = data.page >= data.pages;
+      el("collection-more").hidden = data.page >= data.pages;
       state.collectionItems = reset ? data.items : [...state.collectionItems, ...data.items];
       renderCollection();
       renderCollectionSelection();
+    } catch (error) {
+      if (version !== state.collectionVersion) return;
+      if (reset) {
+        el("collection-count").textContent = "";
+        el("collection-cards").replaceChildren(displayButton("Повторить загрузку карт",
+          () => loadCollection(1, true)));
+      }
+      throw error;
     } finally {
-      state.collectionLoading = false;
-      if (state.collectionReloadPending) {
-        state.collectionReloadPending = false;
-        loadCollection(1, true).catch(showError);
+      if (version === state.collectionVersion) {
+        state.collectionLoading = false;
+        el("collection-more").disabled = false;
       }
     }
   }
@@ -1057,14 +1104,255 @@
       startPrice.value = "";
     }
     const bar = el("select-bar");
-    bar.hidden = !state.selectMode;
+    bar.hidden = !state.selectMode || state.activePage !== "collection" || state.collectionMode !== "cards";
     el("select-bar-label").textContent = `Выбрано ${cards.length}`;
   }
 
+  function refreshCollection() {
+    const mode = state.collectionMode;
+    el("collection-catalog").hidden = mode !== "cards";
+    el("collection-albums").hidden = mode !== "albums";
+    el("collection-duplicates").hidden = mode !== "duplicates";
+    document.querySelectorAll("[data-collection-mode]").forEach((button) => {
+      const active = button.dataset.collectionMode === mode;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    if (mode === "albums") loadCollectionAlbums(albums.page).catch(showError);
+    if (mode === "duplicates") {
+      copies.selected.clear();
+      loadCollectionCopies(copies.page).catch(showError);
+    }
+    if (mode === "cards") {
+      renderReceivedCards();
+      renderCollectionFilters();
+      reloadCatalog();
+    }
+  }
+
+  function setCollectionMode(mode) {
+    if (mode === state.collectionMode) return;
+    state.collectionMode = mode;
+    if (state.selectMode || state.collectionSelected.size) clearCollectionSelection();
+    refreshCollection();
+  }
+
+  function renderReceivedCards() {
+    el("collection-received").hidden = !state.receivedCards.length;
+    el("collection-received-cards").replaceChildren(...state.receivedCards.map((card) =>
+      cardButton(card, false, Boolean(card.lock_reason), () => openCardSheet(card), "")));
+  }
+
+  function clearCollectionSelection() {
+    state.collectionSelected.clear();
+    state.selectMode = false;
+    renderCollectionSelection();
+  }
+
+  function reloadCatalog() {
+    clearTimeout(state.collectionSearchTimer);
+    loadCollection(1, true).catch(showError);
+  }
+
+  function renderCollectionFilters() {
+    const bind = (id, items, key) => renderChips(id, items, state[key], (value) => {
+      if (state[key] === value) return;
+      state[key] = value;
+      clearCollectionSelection();
+      renderCollectionFilters();
+      reloadCatalog();
+    });
+    bind("collection-quick-chips", COLLECTION_FILTERS, "collectionFilter");
+    bind("rarity-chips", RARITIES, "collectionRarity");
+    bind("sort-chips", SORTS, "collectionSort");
+    const rarity = RARITIES.find(({ key }) => key && key === state.collectionRarity)?.title;
+    const sort = state.collectionSort !== "new" && SORTS.find(({ key }) => key === state.collectionSort)?.title;
+    el("collection-filter-summary").textContent = ["Фильтры и сортировка", rarity, sort].filter(Boolean).join(" · ");
+    updateCollectionReset();
+  }
+
+  function updateCollectionReset() {
+    el("collection-reset").hidden = !(
+      state.collectionFilter || state.collectionRarity || state.collectionQuery || state.collectionSort !== "new");
+  }
+
+  function renderCollectionPages(id, data) {
+    const controls = el(id);
+    controls.hidden = data.pages <= 1;
+    controls.querySelector("span").textContent = `${data.page} / ${data.pages}`;
+    const [previous, next] = controls.querySelectorAll("button");
+    previous.disabled = data.page <= 1;
+    next.disabled = data.page >= data.pages;
+  }
+
+  function collectionRow(title, description, button = null) {
+    const row = document.createElement(button ? "button" : "div");
+    row.className = button ? "btn btn-secondary collection-row" : "collection-row";
+    const name = document.createElement("strong");
+    const details = document.createElement("span");
+    name.textContent = title;
+    details.className = "hint";
+    details.textContent = description;
+    row.append(name, details);
+    if (button) {
+      row.type = "button";
+      row.addEventListener("click", button);
+    }
+    return row;
+  }
+
+  async function loadCollectionAlbums(page) {
+    const version = ++albums.version;
+    const series = albums.series;
+    const list = el("collection-album-items");
+    const status = el("collection-album-status");
+    el("collection-album-title").textContent = series ?? "Альбомы по сериям";
+    el("collection-album-back").hidden = series === null;
+    el("collection-album-links").hidden = series !== null;
+    el("collection-album-pages").hidden = true;
+    status.textContent = "Загружаем альбомы…";
+    list.replaceChildren();
+    const params = new URLSearchParams({ page: String(page) });
+    if (series !== null) params.set("series", series);
+    try {
+      const data = await api(`/api/collection/albums?${params}`);
+      if (version !== albums.version) return;
+      albums.page = data.page;
+      if (series === null) {
+        status.textContent = data.total ? "Откройте серию, чтобы посмотреть, кого ещё не хватает."
+          : "Альбом появится после получения первой карты из серии.";
+        for (const item of data.items) {
+          const row = collectionRow(item.series, `Собрано ${item.owned} из ${item.total}`, () => {
+            albums.listPage = albums.page;
+            albums.series = item.series;
+            loadCollectionAlbums(1).catch(showError);
+          });
+          const progress = document.createElement("progress");
+          progress.value = item.owned;
+          progress.max = item.total;
+          progress.setAttribute("aria-hidden", "true");
+          row.append(progress);
+          list.append(row);
+        }
+      } else {
+        status.textContent = `Собрано ${data.owned} из ${data.total} · не хватает: ${data.total - data.owned}`;
+        for (const { name, card } of data.items) {
+          list.append(collectionRow(name, card ? `В коллекции · ${card.rarity_title}` : "Ещё не получена",
+            card ? () => openCardSheet(card) : null));
+        }
+      }
+      renderCollectionPages("collection-album-pages", data);
+    } catch (error) {
+      if (version !== albums.version) return;
+      status.textContent = "Не удалось загрузить альбомы.";
+      list.append(displayButton("Повторить", () => loadCollectionAlbums(page)));
+      throw error;
+    }
+  }
+
+  function updateCopySelection() {
+    const value = [...copies.selected.values()].reduce((total, card) => total + card.dust_value, 0);
+    el("collection-copy-selection").textContent = `Выбрано: ${copies.selected.size} · Получите ${value} пыли`;
+    el("collection-copy-review").disabled = !copies.selected.size || copies.busy;
+  }
+
+  async function loadCollectionCopies(page) {
+    const version = ++copies.version;
+    const list = el("collection-copy-items");
+    const status = el("collection-copy-status");
+    status.textContent = "Загружаем лишние копии…";
+    el("collection-copy-pages").hidden = true;
+    el("collection-copy-actions").hidden = true;
+    list.replaceChildren();
+    try {
+      const data = await api(`/api/collection/duplicates?page=${page}`);
+      if (version !== copies.version) return;
+      copies.page = data.page;
+      copies.maxBatch = data.max_batch;
+      status.textContent = data.total ? `Доступно для распыления: ${data.total}` : "Нет копий для безопасного распыления.";
+      const rows = data.items.map((card) => {
+        const label = document.createElement("label");
+        label.className = "collection-copy";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = copies.selected.has(card.id);
+        checkbox.disabled = copies.busy;
+        checkbox.addEventListener("change", () => {
+          if (!checkbox.checked) copies.selected.delete(card.id);
+          else if (copies.selected.size < copies.maxBatch) copies.selected.set(card.id, card);
+          else {
+            checkbox.checked = false;
+            showToast(`Можно выбрать до ${copies.maxBatch} карт.`);
+          }
+          updateCopySelection();
+        });
+        label.append(checkbox, collectionRow(card.name,
+          `Экземпляр №${card.print_no} · Всего: ${card.owned_count} · ${card.dust_value} пыли`));
+        return label;
+      });
+      list.append(...rows);
+      el("collection-copy-actions").hidden = !data.total;
+      renderCollectionPages("collection-copy-pages", data);
+      updateCopySelection();
+    } catch (error) {
+      if (version !== copies.version) return;
+      status.textContent = "Не удалось загрузить копии.";
+      list.append(displayButton("Повторить", () => loadCollectionCopies(page)));
+      throw error;
+    }
+  }
+
+  function reviewCollectionCopies() {
+    if (copies.busy || !copies.selected.size) return;
+    const cards = [...copies.selected.values()];
+    const estimate = cards.reduce((total, card) => total + card.dust_value, 0);
+    const groups = new Map();
+    for (const card of cards) {
+      if (!groups.has(card.character_id)) groups.set(card.character_id, []);
+      groups.get(card.character_id).push(card);
+    }
+    const body = document.createElement("div");
+    body.className = "collection-list";
+    for (const group of groups.values()) {
+      const [card] = group;
+      body.append(collectionRow(card.name,
+        `Распылить №${group.map((item) => item.print_no).join(", №")} · Останется: ${card.owned_count - group.length}`));
+    }
+    const warning = document.createElement("p");
+    warning.className = "hint";
+    warning.textContent = `Вы получите ${estimate} пыли. Действие нельзя отменить.`;
+    const cancel = displayButton("Вернуться к выбору", closeSheet);
+    const confirm = displayButton(`Распылить · ${formatCardCount(cards.length)}`, async () => {
+      if (copies.busy) return;
+      copies.busy = true;
+      confirm.disabled = true;
+      cancel.disabled = true;
+      updateCopySelection();
+      try {
+        const result = await api("/api/dust/duplicates", {
+          method: "POST", body: JSON.stringify({ card_ids: cards.map(({ id }) => id), estimate }),
+        });
+        removeDustedCards(result);
+        showNotice(`Распылено карт: ${result.card_ids.length}. Получено ${result.amount} пыли.`);
+        haptic("success");
+      } catch (error) { showError(error); }
+      finally {
+        copies.busy = false;
+        copies.selected.clear();
+        if (body.isConnected && !el("sheet").hidden) closeSheet();
+        if (state.activePage === "collection") refreshCollection();
+      }
+    });
+    confirm.className = "btn btn-danger btn-block";
+    body.append(warning, confirm, cancel);
+    openSheet("Проверьте распыление", body);
+  }
+
   async function toggleFavorite(card) {
-    const favoriteIds = new Set(state.favorites.map((favorite) => favorite.id));
-    if (favoriteIds.has(card.id)) favoriteIds.delete(card.id);
-    else favoriteIds.add(card.id);
+    const current = await api("/api/favorites");
+    const favoriteIds = new Set(current.items.map((favorite) => favorite.id));
+    const added = !favoriteIds.delete(card.id);
+    if (added) favoriteIds.add(card.id);
     const result = await api("/api/favorites", {
       method: "POST",
       body: JSON.stringify({ card_ids: [...favoriteIds] }),
@@ -1072,6 +1360,7 @@
     state.favorites = result.items;
     state.favoriteLimit = result.limit;
     haptic("success");
+    return added;
   }
 
   function closeSheet() {
@@ -1086,6 +1375,7 @@
     el("sheet-title").textContent = title;
     el("sheet-body").replaceChildren(body);
     el("sheet").hidden = false;
+    el("sheet").scrollTop = 0;
     el("sheet-backdrop").hidden = false;
     if (main) setMainButton(main.text, main.onClick);
     else clearMainButton();
@@ -1100,6 +1390,13 @@
     preview.disabled = true;
     const actions = document.createElement("div");
     actions.className = "sheet-actions";
+    const otherActions = document.createElement("div");
+    otherActions.className = "sheet-actions";
+    const more = document.createElement("details");
+    more.className = "card-more-actions";
+    const summary = document.createElement("summary");
+    summary.textContent = "Обмен, передача и другие действия";
+    more.append(summary, otherActions);
     const frameStatus = document.createElement("p");
     frameStatus.className = "hint card-frame-status";
     const lockLabels = { listing: "на аукционе", trade: "в обмене", transfer: "в передаче" };
@@ -1109,16 +1406,22 @@
       .filter(Boolean).join(" · ");
     const isFavorite = state.favorites.some((favorite) => favorite.id === card.id);
     const buttons = [
-      [isFavorite ? "★ В избранном" : "☆ В избранное", "secondary", async () => {
+      [isFavorite ? "★ В избранном" : "☆ В избранное", "secondary", async (button) => {
+        button.disabled = true;
         try {
-          await toggleFavorite(card);
-          if (state.activePage === "collection") renderCollection();
-          openCardSheet(card);
-          showNotice(isFavorite ? "Убрано из избранного." : "Добавлено в избранное.");
+          const added = await toggleFavorite(card);
+          if (state.activePage === "collection" && state.collectionMode === "cards") {
+            if (state.collectionFilter === "favorites") reloadCatalog();
+            else if (!state.collectionLoading) renderCollection();
+            renderReceivedCards();
+          }
+          button.textContent = added ? "★ В избранном" : "☆ В избранное";
+          button.setAttribute("aria-pressed", String(added));
+          showNotice(added ? "Добавлено в избранное." : "Убрано из избранного.");
         } catch (error) { showError(error); }
+        finally { button.disabled = false; }
       }],
-      ["Сменить рамку", "secondary", () => openFramePicker(card)],
-      ["Выставить на аукцион", "primary", () => openSellSheet(card)],
+      ["Выставить на аукцион", "secondary", () => openSellSheet(card)],
       ["Предложить обмен", "secondary", () => {
         if (state.tradeToken) {
           showNotice("Завершите текущий обмен, чтобы создать новое предложение.");
@@ -1131,7 +1434,6 @@
       }],
       ["Передать", "secondary", async () => {
         state.collectionSelected = new Map([[card.id, card]]);
-        closeSheet();
         await transferSelected();
       }],
       [`Распылить за ${card.dust_value} пыли`, "danger", async () => {
@@ -1145,12 +1447,13 @@
       button.type = "button";
       button.className = `btn btn-${kind} btn-block`;
       button.textContent = label;
-      if (card.lock_reason && ["Выставить на аукцион", "Предложить обмен", "Передать", "Сменить рамку", `Распылить за ${card.dust_value} пыли`].includes(label)) {
+      const favoriteAction = label.startsWith("★") || label.startsWith("☆");
+      if (favoriteAction) button.setAttribute("aria-pressed", String(isFavorite));
+      if (card.lock_reason && !favoriteAction) {
         button.disabled = true;
-        button.title = "Карта участвует в лоте или обмене";
       }
-      button.addEventListener("click", handler);
-      actions.append(button);
+      button.addEventListener("click", () => handler(button));
+      (favoriteAction ? actions : otherActions).append(button);
     });
     const level = card.upgrade_level || 0;
     const upgradePrice = state.profile?.economy?.upgrade_prices[level];
@@ -1162,9 +1465,15 @@
       upgrade.textContent = `${upgradeEffect?.title || "Улучшить эффект"} · ${upgradePrice} пыли`;
       upgrade.disabled = Boolean(card.lock_reason) || state.balance < upgradePrice;
       upgrade.addEventListener("click", () => upgradeCard(card, upgrade, upgradePrice));
-      actions.prepend(upgrade);
+      actions.append(upgrade);
     }
-    body.append(preview, frameStatus, actions);
+    const manageFrame = document.createElement("button");
+    manageFrame.type = "button";
+    manageFrame.className = "btn btn-secondary btn-block card-frame-manage";
+    manageFrame.textContent = hasCustomFrame(card) ? "Сменить или снять рамку" : "Надеть рамку";
+    manageFrame.disabled = Boolean(card.lock_reason);
+    manageFrame.addEventListener("click", () => openFramePicker(card));
+    body.append(preview, frameStatus, manageFrame, actions, more);
     openSheet(card.name, body);
     el("sheet").classList.add("sheet--card");
   }
@@ -1194,26 +1503,43 @@
     const replace = (items) => items.map((item) => item.id === updated.id ? updated : item);
     state.collectionItems = replace(state.collectionItems);
     state.homeCards = replace(state.homeCards);
+    state.receivedCards = replace(state.receivedCards);
     state.favorites = replace(state.favorites);
-    if (state.collectionSelected.has(updated.id)) {
-      state.collectionSelected.set(updated.id, updated);
+    state.inventory = replace(state.inventory);
+    state.frameShopCards = replace(state.frameShopCards);
+    if (state.frameShopPinnedCard?.id === updated.id) state.frameShopPinnedCard = updated;
+    for (const selection of [state.collectionSelected, state.selected]) {
+      if (selection.has(updated.id)) selection.set(updated.id, updated);
     }
   }
 
-  function openFrameShop() {
+  function openFrameShop(card) {
+    state.frameShopPinnedCard = card;
+    state.frameShopCardId = card.id;
     closeSheet();
-    showPage("crystals");
-    setShopTab("frames");
+    setShopTab("frames", false);
+    showPage("crystals", { loadShop: false });
+    loadFrameShop().then(() => {
+      if (state.activePage === "crystals" && state.shopTab === "frames") {
+        el("frame-shop-preview").scrollIntoView({ block: "start" });
+      }
+    }).catch(showError);
   }
 
-  async function openFramePicker(card) {
+  async function openFramePicker(card, { frameId, onBack = openCardSheet } = {}) {
     haptic("light");
     const body = document.createElement("div");
     body.className = "frame-picker-body";
     const status = document.createElement("p");
     status.className = "hint";
+    status.setAttribute("role", "status");
     status.textContent = "Загружаем ваши рамки…";
-    body.append(status);
+    const back = document.createElement("button");
+    back.type = "button";
+    back.className = "btn btn-secondary";
+    back.textContent = "Назад";
+    back.addEventListener("click", () => onBack(card));
+    body.append(back, status);
     openSheet(`Рамка · ${card.name}`, body);
 
     let frames;
@@ -1224,58 +1550,112 @@
       showError(error);
       return;
     }
-    const owned = [{ id: "classic", title: "Эмаль (стандартная)", rarity: card.rarity,
-      rarity_title: card.rarity_title, owned: true }, ...frames.filter((frame) => frame.owned)];
-    body.replaceChildren();
+    if (!body.isConnected || el("sheet").hidden) return;
+    const owned = [{ id: "classic", title: "Стандартная", rarity: card.rarity, available: 1 },
+      ...frames.filter((frame) => frame.owned)];
     const intro = document.createElement("p");
     intro.className = "hint";
-    intro.textContent = "Выберите рамку — она сразу применится к этой карте.";
+    intro.textContent = owned.length === 1
+      ? "У вас пока нет особых рамок. Их можно получить в магазине или в кейсе."
+      : "Каждый экземпляр можно надеть на одну карту. Чтобы вернуть рамку в инвентарь, выберите «Стандартная» и нажмите «Снять рамку».";
+    const visual = document.createElement("div");
+    visual.className = "frame-picker-preview";
+    const apply = document.createElement("button");
+    apply.type = "button";
+    apply.className = "btn btn-primary btn-block";
     const grid = document.createElement("div");
     grid.className = "frame-picker";
+    const options = new Map();
+    let selected;
+    let previewVersion = 0;
+    let saving = false;
+
+    async function selectFrame(frame) {
+      if (saving || selected === frame) return;
+      selected = frame;
+      const version = ++previewVersion;
+      const current = frame.id === card.frame_style;
+      for (const [id, option] of options) {
+        option.classList.toggle("selected", id === frame.id);
+        option.setAttribute("aria-pressed", String(id === frame.id));
+      }
+      apply.disabled = current || Boolean(card.lock_reason);
+      apply.textContent = current ? "Уже на карте" : frame.id === "classic" ? "Снять рамку" : "Надеть рамку";
+      visual.replaceChildren();
+      status.textContent = "Загружаем примерку…";
+      try {
+        const url = await loadCardImageUrl(card, "", frame.id);
+        if (version !== previewVersion || !body.isConnected) return;
+        const image = document.createElement("img");
+        image.src = url;
+        image.alt = `${card.name} · ${frame.title}`;
+        visual.append(image);
+        const fx = frameEffects(frame.effect, card.rarity, frame.rarity, frame.accent, frame.ornament_url, frame.style);
+        if (fx) visual.append(fx);
+        status.textContent = current ? `Сейчас на карте: ${frame.title}` : `Примерка: ${frame.title}`;
+      } catch {
+        if (version === previewVersion) status.textContent = "Не удалось загрузить примерку.";
+      }
+    }
+
     owned.forEach((frame) => {
       const option = document.createElement("button");
       option.type = "button";
       option.className = "frame-option";
       option.dataset.rarity = frame.rarity;
       const current = frame.id === card.frame_style;
-      if (current) {
-        option.classList.add("selected");
-        option.disabled = true;
+      option.disabled = !current && !frame.available;
+      if (frame.preview_url) {
+        const thumbnail = document.createElement("img");
+        thumbnail.className = "frame-preview";
+        thumbnail.alt = "";
+        thumbnail.loading = "lazy";
+        thumbnail.src = `${apiBase}${frame.preview_url}`;
+        option.append(thumbnail);
       }
-      const preview = document.createElement("img");
-      preview.className = "frame-preview";
-      preview.alt = "";
-      preview.loading = "lazy";
-      loadCardImageUrl(card, "", frame.id).then((url) => {
-        preview.src = url;
-      }).catch(showError);
       const title = document.createElement("strong");
       title.textContent = frame.title;
       const meta = document.createElement("span");
       meta.className = "hint";
-      meta.textContent = current
-        ? `${frame.rarity_title} · Сейчас`
-        : frame.rarity_title;
-      const visual = document.createElement("span");
-      visual.className = "frame-option-visual";
-      visual.append(preview);
-      const fx = frameEffects(frame.effect, card.rarity, frame.rarity, frame.accent, frame.ornament_url, frame.style);
-      if (fx) visual.append(fx);
-      option.append(visual, title, meta);
-      if (!current) {
-        option.addEventListener("click", () => equipFrame(card, frame, option));
-      }
+      meta.textContent = current ? "На этой карте" : frame.id === "classic" ? "Без особой рамки" : frameStockLabel(frame);
+      option.append(title, meta);
+      option.addEventListener("click", () => selectFrame(frame));
+      options.set(frame.id, option);
       grid.append(option);
     });
-    body.append(intro, grid, frameShopButton());
+    apply.addEventListener("click", async () => {
+      if (saving || apply.disabled) return;
+      saving = true;
+      apply.disabled = true;
+      apply.textContent = "Сохраняем…";
+      try {
+        const updated = await equipFrame(card, selected);
+        if (body.isConnected && !el("sheet").hidden) onBack(updated);
+      } catch (error) {
+        showError(error);
+        if (body.isConnected && !el("sheet").hidden) openFramePicker(card, { frameId: selected.id, onBack });
+      } finally {
+        saving = false;
+      }
+    });
+    body.replaceChildren(back, intro, visual, status, grid, apply, frameShopButton(card));
+    const initial = owned.find((frame) => frame.id === frameId && (frame.available || frame.id === card.frame_style))
+      || owned.find((frame) => frame.id === card.frame_style) || owned[0];
+    selectFrame(initial);
   }
 
-  function frameShopButton() {
+  function frameStockLabel(frame) {
+    if (!frame.owned) return "Не получена";
+    if (frame.available) return `Свободно: ${frame.available}${frame.equipped_count ? ` · Надето: ${frame.equipped_count}` : ""}`;
+    return frame.equipped_card_id ? `На карте #${frame.equipped_card_id}` : `Надето: ${frame.equipped_count}`;
+  }
+
+  function frameShopButton(card) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "btn btn-secondary btn-block";
     button.textContent = "Купить ещё рамки";
-    button.addEventListener("click", openFrameShop);
+    button.addEventListener("click", () => openFrameShop(card));
     return button;
   }
 
@@ -1633,7 +2013,7 @@
   el("craft-next").addEventListener("click", () => loadCraftCatalog(state.craftAfter || 0).catch(showError));
   el("case-shards-redeem").addEventListener("click", redeemFrameShards);
 
-  function setShopTab(name) {
+  function setShopTab(name, load = true) {
     state.shopTab = name;
     const banners = {
       rolls: ["Билеты", "Откройте новые карточки!"],
@@ -1652,7 +2032,7 @@
     el("frames-pane").hidden = name !== "frames";
     el("cases-pane").hidden = name !== "cases";
     el("craft-pane").hidden = name !== "craft";
-    if (name === "frames") loadFrameShop().catch(showError);
+    if (name === "frames" && load) loadFrameShop().catch(showError);
     if (name === "cases") loadCaseCatalog().catch(showError);
     if (name === "craft") loadCraftCatalog().catch(showError);
     renderEconomyStatus();
@@ -2153,20 +2533,27 @@
   }
 
   async function loadFrameShopCards(page) {
+    const version = ++state.frameShopCardsVersion;
     const data = await api(`/api/inventory?page=${page}&sort=new`);
-    state.frameShopCards = data.items;
+    if (version !== state.frameShopCardsVersion) return;
+    const pinned = state.frameShopPinnedCard;
+    state.frameShopCards = pinned && !data.items.some(({ id }) => id === pinned.id)
+      ? [pinned, ...data.items] : data.items;
     state.frameShopPage = data.page;
     state.frameShopPages = data.pages;
-    state.frameShopCardId = data.items[0]?.id || null;
+    if (!state.frameShopCards.some(({ id }) => id === state.frameShopCardId)) {
+      state.frameShopCardId = state.frameShopCards[0]?.id ?? null;
+    }
     const select = el("frame-shop-card");
     select.replaceChildren();
-    data.items.forEach((card) => {
+    state.frameShopCards.forEach((card) => {
       const option = document.createElement("option");
       option.value = String(card.id);
       option.textContent = `${card.name} · #${card.id}`;
       select.append(option);
     });
-    select.disabled = !data.items.length;
+    select.value = String(state.frameShopCardId ?? "");
+    select.disabled = !state.frameShopCards.length;
     el("frame-shop-prev").disabled = data.page <= 1;
     el("frame-shop-next").disabled = data.page >= data.pages;
     el("frame-shop-page").textContent = `${data.page} / ${data.pages}`;
@@ -2181,6 +2568,8 @@
     visual.hidden = true;
     const status = el("frame-shop-preview-status");
     const card = state.frameShopCards.find((item) => item.id === state.frameShopCardId);
+    const manage = el("frame-shop-manage");
+    manage.disabled = !card || Boolean(card.lock_reason);
     image.hidden = true;
     if (!card || !state.frameShopFrameId) {
       status.textContent = card ? "Выберите рамку для примерки." : "Получите карту, чтобы примерить рамку.";
@@ -2196,7 +2585,9 @@
       const frame = state.shopFrames.find((item) => item.id === state.frameShopFrameId);
       const fx = frameEffects(frame?.effect, card.rarity, frame?.rarity, frame?.accent, frame?.ornament_url, frame?.style);
       if (fx) visual.append(fx);
-      status.textContent = `Примерка: ${frame?.title || "рамка"} · ${frame?.rarity_title || ""}${frame?.effect ? " · Эффекты включены" : ""}`;
+      status.textContent = frame
+        ? `Примерка: ${frame.title} · ${frame.id === card.frame_style ? "На этой карте" : frameStockLabel(frame)}`
+        : "Примерка рамки";
     } catch (error) {
       if (version === state.framePreviewVersion) status.textContent = "Не удалось загрузить примерку. Выберите рамку ещё раз.";
     }
@@ -2375,7 +2766,7 @@
     const meta = document.createElement("span");
     meta.className = "hint";
     meta.textContent = [frame.rarity_title, chance === undefined ? "Из премиум-кейса" : `Шанс ${chance}%`,
-      frame.owned ? "Получена" : "Не получена"].join(" · ");
+      frameStockLabel(frame)].join(" · ");
     info.append(title, meta);
     const actions = document.createElement("div");
     actions.className = "frame-item-actions";
@@ -2558,25 +2949,36 @@
   });
   el("frame-shop-prev").addEventListener("click", () => loadFrameShopCards(state.frameShopPage - 1).catch(showError));
   el("frame-shop-next").addEventListener("click", () => loadFrameShopCards(state.frameShopPage + 1).catch(showError));
+  el("frame-shop-manage").addEventListener("click", () => {
+    const card = state.frameShopCards.find((item) => item.id === state.frameShopCardId);
+    if (!card || card.lock_reason) return;
+    openFramePicker(card, {
+      frameId: state.frameShopFrameId,
+      onBack: () => {
+        closeSheet();
+        loadFramesCatalog().then(() => {
+          renderFrameShop();
+          renderShopPreview();
+        }).catch(showError);
+      },
+    });
+  });
 
-  async function equipFrame(card, frame, button) {
-    button.disabled = true;
-    try {
-      const result = await api(`/api/cards/${card.id}/frame`, {
-        method: "POST", body: JSON.stringify({ frame_id: frame.id }),
-      });
-      invalidateCardImages(card.id);
-      applyCardUpdate(result.card);
-      closeSheet();
-      if (state.activePage === "collection") renderCollection();
-      if (state.activePage === "account") renderFavorites();
-      renderHome();
-      showNotice(`Рамка «${frame.title}» надета на «${result.card.name}».`);
-      haptic("success");
-    } catch (error) {
-      button.disabled = false;
-      showError(error);
+  async function equipFrame(card, frame) {
+    const result = await api(`/api/cards/${card.id}/frame`, {
+      method: "POST", body: JSON.stringify({ frame_id: frame.id }),
+    });
+    applyCardUpdate(result.card);
+    if (state.activePage === "collection" && state.collectionMode === "cards") {
+      if (!state.collectionLoading) renderCollection();
+      renderReceivedCards();
     }
+    if (state.activePage === "account") renderFavorites();
+    renderHome();
+    showNotice(frame.id === "classic" ? "Рамка снята и возвращена в инвентарь."
+      : `Рамка «${frame.title}» надета на «${result.card.name}».`);
+    haptic("success");
+    return result.card;
   }
 
   function updateAuctionCountdowns() {
@@ -2669,7 +3071,7 @@
     const readyToCreate = !state.trade && selectedCount > 0;
     const readyToAccept = isReceiver && state.trade.status === "pending" && selectedCount > 0;
     primary.textContent = isReceiver ? "Принять обмен" : "Создать ссылку обмена";
-    primary.disabled = !(readyToCreate || readyToAccept);
+    primary.disabled = state.tradeSubmitting || !(readyToCreate || readyToAccept);
     primary.hidden = Boolean(ownOffer || state.trade?.status !== "pending" && state.trade);
     cancel.hidden = !ownOffer || state.trade.status !== "pending";
     if (state.trade?.status === "accepted") {
@@ -2701,10 +3103,10 @@
     if (info.status === "pending" && !info.viewer_is_sender) await loadInventory(1);
     else render();
   }
-  async function createOffer() {
+  async function createOffer(cards) {
     const data = await api("/api/trades", {
       method: "POST",
-      body: JSON.stringify({ card_ids: selectedCards().map((card) => card.id) }),
+      body: JSON.stringify({ card_ids: cards.map((card) => card.id) }),
     });
     state.tradeToken = data.token;
     state.link = data.link;
@@ -2713,10 +3115,10 @@
     render();
     el("share-link").value = data.link;
   }
-  async function acceptOffer() {
-    await api(`/api/trades/${encodeURIComponent(state.tradeToken)}/accept`, {
+  async function acceptOffer(token, cards) {
+    await api(`/api/trades/${encodeURIComponent(token)}/accept`, {
       method: "POST",
-      body: JSON.stringify({ card_ids: selectedCards().map((card) => card.id) }),
+      body: JSON.stringify({ card_ids: cards.map((card) => card.id) }),
     });
     state.selected.clear();
     await loadTrade();
@@ -2772,6 +3174,18 @@
       updateRollShopButtons();
     }
   }
+  function removeDustedCards(result) {
+    const removed = new Set(result.card_ids);
+    state.receivedCards = state.receivedCards.filter((card) => !removed.has(card.id));
+    state.homeCards = state.homeCards.filter((card) => !removed.has(card.id));
+    state.favorites = state.favorites.filter((card) => !removed.has(card.id));
+    if (removed.has(state.frameShopPinnedCard?.id)) state.frameShopPinnedCard = null;
+    clearCollectionSelection();
+    state.ownedCardCount = Math.max(0, state.ownedCardCount - removed.size);
+    el("card-count").textContent = state.ownedCardCount;
+    setBalance(result.balance);
+  }
+
   async function dustSelected(alreadyConfirmed = false) {
     const cards = [...state.collectionSelected.values()];
     if (!cards.length) return;
@@ -2790,41 +3204,19 @@
         method: "POST",
         body: JSON.stringify({ card_ids: cards.map((card) => card.id) }),
       });
-      state.collectionSelected.clear();
-      state.selectMode = false;
-      state.ownedCardCount = Math.max(0, state.ownedCardCount - result.card_ids.length);
-      el("card-count").textContent = state.ownedCardCount;
-      setBalance(result.balance);
-      await loadCollection(1, true);
+      removeDustedCards(result);
+      if (state.activePage === "collection") refreshCollection();
+      if (state.activePage === "home") renderHome();
       showNotice(`Распылено карт: ${result.card_ids.length}. Получено ${result.amount} пыли.`);
       haptic("success");
     } catch (error) { showError(error); }
   }
-  async function dustRarity(rarity, button) {
-    const title = button.dataset.rarityTitle;
-    if (!await confirmAction(
-      `Распылить подходящие дубликаты ${title}? Избранные, улучшенные, заблокированные и один экземпляр каждого персонажа сохранятся. Это действие нельзя отменить.`)) return;
-    const buttons = [...document.querySelectorAll("[data-dust-rarity]")];
-    buttons.forEach((item) => { item.disabled = true; });
-    try {
-      const result = await api("/api/dust/rarity", {
-        method: "POST", body: JSON.stringify({ rarity }),
-      });
-      state.collectionSelected.clear();
-      state.selectMode = false;
-      state.ownedCardCount = Math.max(0, state.ownedCardCount - result.card_ids.length);
-      el("card-count").textContent = state.ownedCardCount;
-      setBalance(result.balance);
-      await loadCollection(1, true);
-      showNotice(`Распылено карт ${title}: ${result.card_ids.length}. Получено ${result.amount} пыли.`);
-      haptic("success");
-    } catch (error) { showError(error); }
-    finally { buttons.forEach((item) => { item.disabled = false; }); }
-  }
   async function transferSelected() {
     const cards = [...state.collectionSelected.values()];
-    if (!cards.length) return;
+    if (!cards.length || state.transferSubmitting) return;
+    state.transferSubmitting = true;
     try {
+      if (!await confirmAction(`Создать ссылку передачи: ${formatCardCount(cards.length)}? ${frameHandoffWarning(cards)}`)) return;
       const result = await api("/api/transfers", {
         method: "POST",
         body: JSON.stringify({ card_ids: cards.map((card) => card.id) }),
@@ -2834,7 +3226,7 @@
       state.collectionSelected.clear();
       state.selectMode = false;
       renderCollectionSelection();
-      await loadCollection(1, true);
+      if (state.activePage === "collection") refreshCollection();
       showNotice("Ссылка передачи создана и действует 24 часа.");
       const body = document.createElement("div");
       const input = document.createElement("input");
@@ -2862,17 +3254,20 @@
       body.append(input, copy, send);
       openSheet("Ссылка передачи", body);
     } catch (error) { showError(error); }
+    finally { state.transferSubmitting = false; }
   }
   async function sellSelected() {
     const cards = [...state.collectionSelected.values()];
-    if (cards.length !== 1) return;
+    if (cards.length !== 1 || state.listingSubmitting) return;
     const card = cards[0];
     const price = Number(el("auction-start-price").value);
     if (!Number.isSafeInteger(price) || price <= 0) {
       showError(new Error("Укажите стартовую ставку — целое число больше нуля."));
       return;
     }
+    state.listingSubmitting = true;
     try {
+      if (!await confirmAction(`Выставить карту на аукцион? ${frameHandoffWarning(cards)}`)) return;
       await api("/api/listings", {
         method: "POST",
         body: JSON.stringify({ card_id: card.id, starting_price: price }),
@@ -2880,32 +3275,11 @@
       state.collectionSelected.clear();
       state.selectMode = false;
       renderCollectionSelection();
-      await loadCollection(1, true);
+      if (state.activePage === "collection") refreshCollection();
       showNotice(`Аукцион создан со стартовой ставкой ${price} пыли на 24 часа.`);
       haptic("success");
     } catch (error) { showError(error); }
-  }
-
-  function openDustMenu() {
-    const body = document.createElement("div");
-    body.className = "menu-list";
-    const hint = document.createElement("p");
-    hint.className = "hint";
-    hint.textContent = "Распыление затрагивает только дубликаты. Избранные и заблокированные карты, один экземпляр каждого персонажа, а также легендарные и мифические карты сохраняются.";
-    body.append(hint);
-    document.querySelectorAll("[data-dust-rarity]").forEach((source) => {
-      if (["legendary", "mythical"].includes(source.dataset.dustRarity)) return;
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "btn btn-danger btn-block";
-      button.textContent = `Дубликаты ${source.dataset.rarityTitle}`;
-      button.addEventListener("click", () => {
-        closeSheet();
-        dustRarity(source.dataset.dustRarity, source);
-      });
-      body.append(button);
-    });
-    openSheet("Массовое распыление", body);
+    finally { state.listingSubmitting = false; }
   }
 
   el("drop-close").addEventListener("click", closeDropOpening);
@@ -2915,10 +3289,6 @@
     dropSession.wake?.();
     el("drop-skip").hidden = true;
     el("drop-description").textContent = "Ожидаем ответ сервера…";
-  });
-  el("drop-to-collection").addEventListener("click", () => {
-    closeDropOpening();
-    showPage("collection");
   });
   el("drop-dust").addEventListener("click", async () => {
     if (!state.lastDropCard) return;
@@ -2965,12 +3335,19 @@
   el("info-popup-close").addEventListener("click", closeInfoPopup);
   el("info-popup-backdrop").addEventListener("click", closeInfoPopup);
   el("primary").addEventListener("click", async () => {
+    const cards = selectedCards();
+    if (!cards.length || state.tradeSubmitting) return;
+    const trade = state.trade;
+    const token = state.tradeToken;
+    const warning = frameHandoffWarning(trade ? [...cards, ...trade.sender_cards] : cards);
+    state.tradeSubmitting = true;
     el("primary").disabled = true;
     try {
-      if (state.trade) await acceptOffer();
-      else await createOffer();
+      if (!await confirmAction(`${trade ? "Принять обмен? Обмен необратим." : "Создать ссылку обмена?"} ${warning}`)) return;
+      if (trade) await acceptOffer(token, cards);
+      else await createOffer(cards);
     } catch (error) { showError(error); }
-    finally { render(); }
+    finally { state.tradeSubmitting = false; render(); }
   });
   el("cancel").addEventListener("click", async () => {
     try {
@@ -3057,46 +3434,68 @@
   });
   el("collection-search").addEventListener("input", (event) => {
     state.collectionQuery = event.target.value.trim();
-    state.collectionSelected.clear();
-    renderCollectionSelection();
+    clearCollectionSelection();
+    updateCollectionReset();
     clearTimeout(state.collectionSearchTimer);
     state.collectionSearchTimer = setTimeout(
-      () => loadCollection(1, true).catch(showError), 250);
+      reloadCatalog, 250);
   });
-  el("collection-menu").addEventListener("click", openDustMenu);
-  el("collection-duplicates").addEventListener("change", (event) => {
-    state.collectionDuplicates = event.target.checked;
-    loadCollection(1, true).catch(showError);
+  document.querySelectorAll("[data-collection-mode]").forEach((button) => {
+    button.addEventListener("click", () => setCollectionMode(button.dataset.collectionMode));
   });
+  el("collection-received-close").addEventListener("click", () => {
+    state.receivedCards = [];
+    renderReceivedCards();
+  });
+  el("collection-reset").addEventListener("click", () => {
+    state.collectionQuery = state.collectionRarity = state.collectionFilter = "";
+    state.collectionSort = "new";
+    el("collection-search").value = "";
+    clearCollectionSelection();
+    renderCollectionFilters();
+    el("collection-search").focus();
+    reloadCatalog();
+  });
+  el("collection-favorites").addEventListener("click", () => {
+    state.collectionFilter = "favorites";
+    state.collectionRarity = state.collectionQuery = "";
+    el("collection-search").value = "";
+    setCollectionMode("cards");
+  });
+  el("collection-album-back").addEventListener("click", () => {
+    albums.series = null;
+    loadCollectionAlbums(albums.listPage).catch(showError);
+  });
+  el("collection-album-prev").addEventListener("click", () => loadCollectionAlbums(albums.page - 1).catch(showError));
+  el("collection-album-next").addEventListener("click", () => loadCollectionAlbums(albums.page + 1).catch(showError));
+  el("collection-copy-prev").addEventListener("click", () => loadCollectionCopies(copies.page - 1).catch(showError));
+  el("collection-copy-next").addEventListener("click", () => loadCollectionCopies(copies.page + 1).catch(showError));
+  el("collection-copy-review").addEventListener("click", reviewCollectionCopies);
   el("collection-select").addEventListener("click", () => {
     state.selectMode = true;
     renderCollectionSelection();
     showToast("Нажмите на карты, чтобы выбрать до 10.");
   });
   el("select-cancel").addEventListener("click", () => {
-    state.collectionSelected.clear();
-    state.selectMode = false;
-    renderCollectionSelection();
+    clearCollectionSelection();
     renderCollection();
   });
-  el("collection-prev").addEventListener("click", () =>
-    loadCollection(state.collectionPage - 1, true).catch(showError));
-  el("collection-next").addEventListener("click", () =>
-    loadCollection(state.collectionPage + 1, true).catch(showError));
+  el("collection-more").addEventListener("click", () =>
+    loadCollection(state.collectionPage + 1).catch(showError));
   el("frame-shop-to-collection").addEventListener("click", () => {
+    state.collectionMode = "cards";
     showPage("collection");
     haptic("light");
   });
   el("dust-selected").addEventListener("click", () => dustSelected());
-  document.querySelectorAll("[data-dust-rarity]").forEach((button) => {
-    button.addEventListener("click", () => dustRarity(button.dataset.dustRarity, button));
-  });
   el("transfer-selected").addEventListener("click", transferSelected);
   el("sell-selected").addEventListener("click", sellSelected);
   el("create-lot").addEventListener("click", () => {
+    state.collectionMode = "cards";
+    clearCollectionSelection();
     state.selectMode = true;
     showPage("collection");
-    showToast("Выберите одну карту долгим нажатием, затем «Продать».");
+    showToast("Выберите одну карту, затем «Продать».");
   });
   document.querySelectorAll("[data-select-action]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -3123,28 +3522,11 @@
     } else window.open(state.transferLink, "_blank", "noopener");
   });
 
-  const bindChips = (id, items, read, write) => {
-    const apply = (current) => {
-      renderChips(id, items, current, (key) => {
-        write(key);
-        loadCollection(1, true).catch(showError);
-        apply(key);
-      });
-    };
-    apply(read());
-  };
-  bindChips("rarity-chips", RARITIES, () => state.collectionRarity, (key) => {
-    state.collectionRarity = key;
-  });
-  bindChips("sort-chips", SORTS, () => state.collectionSort, (key) => {
-    state.collectionSort = key;
-  });
-
   const sentinel = el("collection-sentinel");
   if ("IntersectionObserver" in window) {
     new IntersectionObserver((entries) => {
       if (!entries.some((entry) => entry.isIntersecting)) return;
-      if (state.activePage !== "collection") return;
+      if (state.activePage !== "collection" || state.collectionMode !== "cards") return;
       if (state.collectionPage >= state.collectionPages) return;
       loadCollection(state.collectionPage + 1).catch(showError);
     }, { rootMargin: "240px" }).observe(sentinel);
@@ -3169,7 +3551,7 @@
     }
   });
 
-  const displayState = { items: [], draft: null, mode: "manager", returnPage: "account",
+  const displayState = { items: [], draft: null, mode: "manager", returnPage: "account", managerReturnPage: "account",
     pickerItems: [], pickerPage: 1, pickerPages: 1, pickerVersion: 0, busy: false };
   const displayThemes = { lunar: "Лунный сад", neon: "Неоновая ночь", gold: "Золотая галерея" };
 
@@ -3361,12 +3743,16 @@
   function backFromShowcases() {
     if (displayState.busy) return;
     if (displayState.mode === "editor" || displayState.returnPage === "manager") {
-      displayState.returnPage = "account";
+      displayState.returnPage = displayState.managerReturnPage;
       loadShowcases().catch(showError);
     } else showPage(displayState.returnPage);
   }
   el("showcases-open").addEventListener("click", () => {
-    displayState.returnPage = "account";
+    displayState.returnPage = displayState.managerReturnPage = "account";
+    loadShowcases().catch(showError);
+  });
+  el("collection-showcases").addEventListener("click", () => {
+    displayState.returnPage = displayState.managerReturnPage = "collection";
     loadShowcases().catch(showError);
   });
   el("showcases-back").addEventListener("click", backFromShowcases);

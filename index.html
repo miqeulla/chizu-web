@@ -409,6 +409,14 @@
             <button id="drop-all-button" class="btn btn-secondary" type="button" disabled>Открыть все</button>
           </div>
         </div>
+        <section id="home-ticket-panel" class="ticket-panel" aria-label="Дополнительные билеты" hidden>
+          <span class="home-item-art ticket-item-art" aria-hidden="true"></span>
+          <div class="ticket-copy">
+            <span>Дополнительные билеты</span>
+            <strong id="home-ticket-count"></strong>
+          </div>
+          <button id="ticket-drop-button" class="btn btn-secondary" type="button" disabled>Открыть карту</button>
+        </section>
       </div>
       <article class="daily-banner">
         <span class="daily-icon game-icon game-icon-gift" aria-hidden="true"></span>
@@ -422,39 +430,85 @@
     </section>
 
     <section id="collection-page" class="page-view" hidden>
-      <div class="page-banner page-banner--collection"><span>CHIZU / КОЛЛЕКЦИЯ</span><h1>Коллекция</h1><p>Все ваши встречи в одном месте</p></div>
-      <section class="collection-tools" aria-label="Поиск и фильтры коллекции">
-        <div class="search-row collection-search-row">
-          <svg class="collection-search-icon" aria-hidden="true"><use href="#icon-search"></use></svg>
-          <input id="collection-search" type="search" placeholder="Имя или серия" aria-label="Поиск по имени или серии">
-          <button id="collection-menu" class="icon-btn" type="button" aria-label="Массовое распыление дубликатов">
-            <svg class="icon" aria-hidden="true"><use href="#icon-more"></use></svg>
-          </button>
+      <div class="page-banner page-banner--collection"><h1>Коллекция</h1></div>
+      <div class="tabs" role="group" aria-label="Разделы коллекции">
+        <button type="button" data-collection-mode="cards" class="active" aria-pressed="true">Карты</button>
+        <button type="button" data-collection-mode="albums" aria-pressed="false">Альбомы</button>
+        <button type="button" data-collection-mode="duplicates" aria-pressed="false">Дубликаты</button>
+      </div>
+      <div id="collection-catalog">
+        <section id="collection-received" hidden>
+          <div class="collection-list-heading">
+            <h2 class="section-label">Только что получены</h2>
+            <button id="collection-received-close" class="btn btn-secondary" type="button">Скрыть</button>
+          </div>
+          <div id="collection-received-cards" class="card-grid"></div>
+        </section>
+        <section class="collection-tools" aria-label="Поиск и фильтры коллекции">
+          <div class="search-row collection-search-row">
+            <svg class="collection-search-icon" aria-hidden="true"><use href="#icon-search"></use></svg>
+            <input id="collection-search" type="search" placeholder="Имя или серия" aria-label="Поиск по имени или серии">
+          </div>
+          <div class="chip-row" id="collection-quick-chips" aria-label="Быстрый фильтр"></div>
+          <details id="collection-filters">
+            <summary id="collection-filter-summary">Фильтры и сортировка</summary>
+            <div class="collection-filter-group">
+              <span class="collection-filter-label">Редкость</span>
+              <div class="chip-row" id="rarity-chips" aria-label="Фильтр редкости"></div>
+            </div>
+            <div class="collection-filter-group">
+              <span class="collection-filter-label">Сортировка</span>
+              <div class="chip-row" id="sort-chips" aria-label="Сортировка карт"></div>
+            </div>
+          </details>
+          <button id="collection-reset" class="btn btn-secondary" type="button" hidden>Сбросить поиск и фильтры</button>
+        </section>
+        <div class="collection-list-heading">
+          <h2 class="section-label">Ваши карты</h2>
+          <div class="collection-meta" aria-live="polite">
+            <span id="collection-count"></span>
+            <strong id="collection-page-label"></strong>
+          </div>
         </div>
-        <div class="collection-filter-group">
-          <span class="collection-filter-label">Редкость</span>
-          <div class="chip-row" id="rarity-chips" aria-label="Фильтр редкости"></div>
+        <button id="collection-select" class="btn btn-secondary collection-select" type="button">Выбрать карты</button>
+        <p class="collection-help">★ — избранное. Замок — карта в обмене, передаче или на аукционе.</p>
+        <div id="collection-cards" class="card-grid"></div>
+        <div id="collection-sentinel"></div>
+        <button id="collection-more" class="btn btn-secondary btn-block" type="button" hidden>Показать ещё карты</button>
+      </div>
+      <section id="collection-albums" hidden>
+        <div class="collection-list-heading">
+          <h2 id="collection-album-title" class="section-label">Альбомы по сериям</h2>
+          <button id="collection-album-back" class="btn btn-secondary" type="button" hidden>К альбомам</button>
         </div>
-        <label class="collection-duplicates"><input id="collection-duplicates" type="checkbox"> Только дубликаты</label>
-        <div class="collection-filter-group">
-          <span class="collection-filter-label">Сортировка</span>
-          <div class="chip-row" id="sort-chips" aria-label="Сортировка карт"></div>
+        <p id="collection-album-status" class="hint" role="status"></p>
+        <div id="collection-album-items" class="collection-list"></div>
+        <div id="collection-album-pages" class="collection-pages" hidden>
+          <button id="collection-album-prev" class="btn btn-secondary" type="button">Назад</button>
+          <span class="hint"></span>
+          <button id="collection-album-next" class="btn btn-secondary" type="button">Дальше</button>
+        </div>
+        <div id="collection-album-links" class="showcase-actions">
+          <button id="collection-favorites" class="btn btn-secondary" type="button">Избранное</button>
+          <button id="collection-showcases" class="btn btn-secondary" type="button">Мои витрины</button>
         </div>
       </section>
-      <div class="collection-list-heading">
-        <h2 class="section-label">Ваши карты</h2>
-        <div class="collection-meta" aria-live="polite">
-          <span id="collection-count">0 карт</span>
-          <strong id="collection-page-label"></strong>
+      <section id="collection-duplicates" hidden>
+        <h2 class="section-label">Лишние копии</h2>
+        <p class="hint">Здесь только копии, которые можно безопасно распылить. По одной карте каждого персонажа, избранные, заблокированные, оформленные, легендарные и мифические карты сохранятся.</p>
+        <p id="collection-copy-status" class="hint" role="status"></p>
+        <div id="collection-copy-items" class="collection-list"></div>
+        <div id="collection-copy-pages" class="collection-pages" hidden>
+          <button id="collection-copy-prev" class="btn btn-secondary" type="button">Назад</button>
+          <span class="hint"></span>
+          <button id="collection-copy-next" class="btn btn-secondary" type="button">Дальше</button>
         </div>
-      </div>
-      <button id="collection-select" class="btn btn-secondary collection-select" type="button">Выбрать карты</button>
-      <p class="collection-help">Нажмите на карту для действий. Удерживайте карту, чтобы выбрать несколько. ★ — избранная, замок — участвует в обмене, передаче или аукционе.</p>
-      <div id="collection-cards" class="card-grid"></div>
-      <div id="collection-sentinel"></div>
+        <div id="collection-copy-actions" class="collection-tools" hidden>
+          <p id="collection-copy-selection" role="status"></p>
+          <button id="collection-copy-review" class="btn btn-primary btn-block" type="button" disabled>Проверить распыление</button>
+        </div>
+      </section>
       <div class="hidden-contract">
-        <button id="collection-prev" type="button">← Назад</button>
-        <button id="collection-next" type="button">Вперёд →</button>
         <span id="selection-label">Выбрано: 0</span>
         <button id="dust-selected" type="button">Распылить выбранные</button>
         <button id="transfer-selected" type="button">Передать выбранные</button>
@@ -462,11 +516,6 @@
         <button id="sell-selected" type="button">Создать аукцион</button>
         <select id="rarity-filter"><option value=""></option></select>
         <select id="sort-filter"><option value="new"></option></select>
-        <button type="button" data-dust-rarity="common" data-rarity-title="N · Common">N · Common</button>
-        <button type="button" data-dust-rarity="rare" data-rarity-title="R · Rare">R · Rare</button>
-        <button type="button" data-dust-rarity="epic" data-rarity-title="SR · Epic">SR · Epic</button>
-        <button type="button" data-dust-rarity="legendary" data-rarity-title="SSR · Legendary">SSR · Legendary</button>
-        <button type="button" data-dust-rarity="mythical" data-rarity-title="UR · Mythical">UR · Mythical</button>
         <div id="transfer-share"><input id="transfer-link" readonly><button id="transfer-copy" type="button">Копировать</button><button id="transfer-send" type="button">Отправить</button></div>
       </div>
     </section>
@@ -586,10 +635,6 @@
               </button>
               <span id="ticket-shop-hint" class="hint"></span>
             </div>
-            <div class="ticket-use-row">
-              <span id="home-ticket-count">—</span>
-              <button id="ticket-drop-button" class="btn btn-secondary" type="button" disabled>Открыть карту за билет</button>
-            </div>
           </article>
         </div>
         <article class="soon-card">
@@ -632,6 +677,9 @@
           <div id="frame-shop-visual" class="frame-shop-visual" hidden>
             <img id="frame-shop-image" alt="Предпросмотр рамки на выбранной карте" hidden>
           </div>
+          <button id="frame-shop-manage" class="btn btn-primary btn-block" type="button" disabled>
+            Управлять рамками выбранной карты
+          </button>
         </section>
         <div class="action-with-info">
           <button id="frame-shop-to-collection" class="btn btn-secondary btn-block" type="button">
@@ -640,7 +688,7 @@
           <button id="frame-info" class="info-trigger" type="button"
             aria-label="Информация о рамках"
             data-info-title="Рамки карт"
-            data-info-text="Купленные рамки надеваются в коллекции: откройте карту и нажмите «Сменить рамку».">
+            data-info-text="Один экземпляр рамки можно надеть на одну карту. Снимите рамку, чтобы вернуть её в инвентарь. При обмене или передаче надетая рамка переходит новому владельцу вместе с картой.">
             <svg class="icon-sm" aria-hidden="true"><use href="#icon-info"></use></svg>
           </button>
         </div>
