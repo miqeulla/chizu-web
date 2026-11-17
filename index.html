@@ -364,15 +364,15 @@
         <span>Chizu</span>
       </div>
       <div class="resource-chips">
-        <button class="chip" type="button" data-open-page="crystals" aria-label="Пыль" title="Пыль">
+        <button class="chip" type="button" data-wallet="dust" aria-label="Пыль" title="Пыль">
           <span class="icon-sm chip-dust currency-icon" aria-hidden="true"></span>
           <strong id="balance">—</strong>
         </button>
-        <button class="chip" type="button" data-open-page="crystals" aria-label="Кристаллы" title="Кристаллы">
+        <button class="chip" type="button" data-wallet="crystals" aria-label="Кристаллы" title="Кристаллы">
           <span class="icon-sm chip-crystal currency-icon" aria-hidden="true"></span>
           <strong id="crystals-balance">0</strong>
         </button>
-        <button class="chip" type="button" data-open-page="crystals" aria-label="Билеты — попытки открыть карту" title="Билеты — попытки открыть карту">
+        <button class="chip" type="button" data-wallet="rolls" aria-label="Билеты — попытки открыть карту" title="Билеты — попытки открыть карту">
           <span class="icon-sm chip-roll currency-icon" aria-hidden="true"></span>
           <strong id="roll-balance">0</strong>
         </button>
@@ -404,9 +404,9 @@
           <p id="drop-timer" class="drop-timer">Загружаем запас…</p>
           <p id="drop-error" class="drop-error" role="alert" hidden></p>
           <button id="drop-retry" class="drop-retry" type="button" hidden>Попробовать снова</button>
-          <div class="drop-actions">
-            <button id="drop-button" class="btn btn-primary" type="button" disabled>Открыть одну</button>
-            <button id="drop-all-button" class="btn btn-secondary" type="button" disabled>Открыть все</button>
+          <div id="drop-actions" class="drop-actions" hidden>
+            <button id="drop-all-button" class="btn btn-primary" type="button" hidden disabled>Открыть все</button>
+            <button id="drop-button" class="btn btn-secondary" type="button" disabled>Открыть карту</button>
           </div>
         </div>
         <section id="home-ticket-panel" class="ticket-panel" aria-label="Дополнительные билеты" hidden>
@@ -415,7 +415,7 @@
             <span>Дополнительные билеты</span>
             <strong id="home-ticket-count"></strong>
           </div>
-          <button id="ticket-drop-button" class="btn btn-secondary" type="button" disabled>Открыть карту</button>
+          <button id="ticket-drop-button" class="btn btn-secondary" type="button" disabled>Использовать 1 билет</button>
         </section>
       </div>
       <article class="daily-banner">
@@ -447,7 +447,7 @@
         <section class="collection-tools" aria-label="Поиск и фильтры коллекции">
           <div class="search-row collection-search-row">
             <svg class="collection-search-icon" aria-hidden="true"><use href="#icon-search"></use></svg>
-            <input id="collection-search" type="search" placeholder="Имя или серия" aria-label="Поиск по имени или серии">
+            <input id="collection-search" type="search" maxlength="100" placeholder="Имя или серия" aria-label="Поиск по имени или серии">
           </div>
           <div class="chip-row" id="collection-quick-chips" aria-label="Быстрый фильтр"></div>
           <details id="collection-filters">
@@ -471,6 +471,7 @@
           </div>
         </div>
         <button id="collection-select" class="btn btn-secondary collection-select" type="button">Выбрать карты</button>
+        <button id="collection-layout" class="btn btn-secondary collection-select" type="button" aria-pressed="false">Компактный список</button>
         <p class="collection-help">★ — избранное. Замок — карта в обмене, передаче или на аукционе.</p>
         <div id="collection-cards" class="card-grid"></div>
         <div id="collection-sentinel"></div>
@@ -529,7 +530,14 @@
       </div>
       <div id="market-pane">
         <h2 class="section-label market-section-title">Аукционы</h2>
-        <div id="market-cards"></div>
+        <input id="market-search" class="field" type="search" maxlength="100" placeholder="Имя или аниме" aria-label="Поиск на Маркете">
+        <div class="market-filters">
+          <button data-market-filter="affordable" type="button" class="btn btn-secondary" aria-pressed="false">Мне по карману</button>
+          <button data-market-filter="ending_soon" type="button" class="btn btn-secondary" aria-pressed="false" title="Заканчиваются в ближайший час">Скоро закончатся</button>
+          <button data-market-filter="special_numbers" type="button" class="btn btn-secondary" aria-pressed="false">Особые номера</button>
+        </div>
+        <div id="market-cards" aria-live="polite"></div>
+        <button id="market-more" class="btn btn-secondary btn-block" type="button" hidden>Ещё лоты</button>
       </div>
       <div id="mine-pane" hidden>
         <h2 class="section-label market-section-title">Мои лоты</h2>
@@ -614,8 +622,13 @@
               <label for="ticket-amount">Количество билетов</label>
               <output id="ticket-amount-label" for="ticket-amount">1 билет</output>
             </div>
-            <input id="ticket-amount" class="ticket-slider" type="range"
-              min="1" max="100" step="1" value="1" aria-label="Количество билетов">
+            <div class="ticket-quick-amounts">
+              <button type="button" class="btn btn-secondary" data-ticket-amount="1">1</button>
+              <button type="button" class="btn btn-secondary" data-ticket-amount="5">5</button>
+              <button type="button" class="btn btn-secondary" data-ticket-amount="10">10</button>
+              <input id="ticket-amount" class="field" type="number" inputmode="numeric"
+                min="1" max="100" step="1" value="1" aria-label="Точное количество билетов">
+            </div>
             <div class="ticket-cost-row">
               <span>Итого</span>
               <strong><span class="icon-sm chip-crystal currency-icon" aria-hidden="true"></span>
@@ -697,6 +710,7 @@
           </div>
           <div class="case-info">
             <h2>Премиум-кейс</h2>
+            <p id="case-comparison" class="hint" role="status"></p>
           </div>
           <div class="action-with-info">
             <button id="case-open-button" class="btn btn-primary btn-block" type="button" disabled>
@@ -712,6 +726,7 @@
           </div>
         </article>
         <p id="case-balance-hint" class="hint"></p>
+        <div id="case-loading-status" role="status"></div>
         <section class="economy-panel">
           <p id="case-guarantee" class="hint" role="status"></p>
           <p id="case-shards" class="hint"></p>
@@ -719,13 +734,16 @@
           <select id="case-shard-frame" class="field"></select>
           <button id="case-shards-redeem" class="btn btn-secondary btn-block" type="button" disabled>Получить рамку</button>
         </section>
-        <p class="hint">Базовые шансы ниже. При срабатывании гарантии выпадает только недостающая рамка, с весами по её редкости.</p>
-        <h2 class="section-label">Возможные награды</h2>
-        <div id="case-odds-table" class="case-odds"></div>
+        <details class="economy-panel">
+          <summary>Содержимое и шансы</summary>
+          <p class="hint">При срабатывании гарантии выпадает одна из недостающих рамок с весом её редкости.</p>
+          <div id="case-odds-table" class="case-odds"></div>
+        </details>
       </div>
     </section>
 
     <section id="account-page" class="page-view" hidden>
+      <div id="account-load-status" role="status"></div>
       <div class="profile-head">
         <div id="account-avatar" class="avatar" role="img" aria-label="Аватар Telegram"></div>
         <div class="profile-intro">
@@ -797,6 +815,7 @@
         </button>
       </section>
       <h2 class="section-label">Активные лоты</h2>
+      <button id="notification-settings" class="btn btn-secondary btn-block" type="button">Уведомления Telegram</button>
       <div id="my-listings"></div>
       <h2 class="section-label">Ссылки передачи</h2>
       <div id="my-transfers"></div>
@@ -931,11 +950,15 @@
   </aside>
 
   <div id="select-bar" class="select-bar" hidden>
-    <span id="select-bar-label">Выбрано 0</span>
+    <button id="select-review" class="btn btn-primary" type="button" disabled>Выбрано 0 · Проверить</button>
     <button id="select-cancel" class="btn btn-secondary" type="button">Отмена</button>
-    <button class="btn btn-danger" type="button" data-select-action="dust">Распылить</button>
     <button class="btn btn-secondary" type="button" data-select-action="transfer">Передать</button>
     <button class="btn btn-primary" type="button" data-select-action="sell">Продать</button>
+  </div>
+
+  <div id="operation-recovery" class="operation-recovery" hidden>
+    <span id="operation-status" role="status"></span>
+    <button id="operation-retry" class="btn btn-secondary" type="button">Проверить и завершить</button>
   </div>
 
   <div id="drop-overlay" class="drop-overlay" role="dialog" aria-modal="true"
@@ -977,7 +1000,7 @@
   <div id="frame-roulette" class="frame-roulette-overlay" role="dialog" aria-modal="true"
        aria-labelledby="frame-roulette-title" hidden>
     <div class="frame-roulette-dialog">
-      <span class="drop-eyebrow">ПАК РАМОК · РУЛЕТКА</span>
+      <span class="drop-eyebrow">РУЛЕТКА</span>
       <h2 id="frame-roulette-title" tabindex="-1"></h2>
       <div id="frame-roulette-window" class="frame-roulette-window" aria-hidden="true">
         <div id="frame-roulette-track" class="frame-roulette-track"></div>
@@ -985,25 +1008,6 @@
       <div id="frame-roulette-award" class="frame-roulette-award"></div>
       <p id="frame-roulette-result" role="status" aria-live="polite"></p>
       <button id="frame-roulette-close" class="btn btn-primary btn-block" type="button" hidden>Продолжить</button>
-    </div>
-  </div>
-
-  <div id="case-overlay" class="case-overlay" role="dialog" aria-modal="true"
-       aria-labelledby="case-opening-title" hidden>
-    <div class="case-opening-card">
-      <span class="drop-eyebrow">ПРЕМИУМ-КЕЙС</span>
-      <h2 id="case-opening-title" tabindex="-1">Готовим кейс…</h2>
-      <div class="case-reveal-stage" aria-hidden="true">
-        <span class="case-reveal-halo"></span>
-        <span class="case-reveal-ring"></span>
-        <div id="case-opening-chest" class="case-opening-chest"></div>
-        <div id="case-reward-art" class="case-reward-art"></div>
-        <div class="case-reveal-sparks"><i></i><i></i><i></i><i></i><i></i><i></i></div>
-      </div>
-      <p id="case-result" class="case-result" role="status" aria-live="polite">Получаем награду…</p>
-      <button id="case-close" class="btn btn-primary btn-block" type="button" hidden>
-        Продолжить
-      </button>
     </div>
   </div>
 

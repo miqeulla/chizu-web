@@ -1252,63 +1252,8 @@ img.frame-preview {
 .case-odds th { color: var(--muted); }
 .case-odds td:nth-child(2) { color: var(--accent); font-weight: 750; }
 .case-odds tr:last-child td { border-bottom: 0; }
+.case-odds-preview { display: inline-block; object-fit: contain; vertical-align: middle; margin-right: 6px; }
 .case-disclaimer { margin: 10px 2px; }
-.case-overlay[hidden] { display: none; }
-.case-overlay {
-  position: fixed;
-  z-index: 60;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: #0b0814ed;
-}
-.case-opening-card {
-  display: grid;
-  gap: 18px;
-  width: min(100%, 380px);
-  padding: 24px 18px;
-  border: 1px solid #8e6dcb;
-  border-radius: 24px;
-  background:
-    radial-gradient(ellipse at 50% 0, #b57bff30, transparent 65%),
-    var(--surface);
-  text-align: center;
-  box-shadow: 0 20px 70px #0009;
-}
-.case-opening-card h2 { margin: 0; }
-.case-reel-window {
-  position: relative;
-  height: 82px;
-  overflow: hidden;
-  border: 1px solid #b57bff99;
-  border-radius: 14px;
-  background: #100d1a;
-  box-shadow: inset 0 0 24px #b57bff22;
-}
-.case-reel {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-  padding: 8px;
-}
-.case-reel-item {
-  display: grid;
-  flex: 0 0 58px;
-  place-items: center;
-  overflow: hidden;
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface-2);
-  color: var(--text);
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.case-result { min-height: 24px; margin: 0; color: var(--dust); font-weight: 750; }
-
 .sheet-backdrop {
   position: fixed;
   z-index: 40;
@@ -1813,7 +1758,7 @@ body:has(#home-page:not([hidden])) .drop-timer::before {
   opacity: .9;
 }
 
-body:has(#home-page:not([hidden])) #drop-button {
+body:has(#home-page:not([hidden])) .drop-actions .btn-primary {
   background: linear-gradient(105deg, #bd72ff, #e19aff 52%, #a34aff);
   box-shadow: 0 0 16px #c465ff8c, 0 8px 28px #6c2abf66;
 }
@@ -1943,7 +1888,7 @@ body:has(#home-page:not([hidden])) .main-nav button[data-page="account"] > .icon
   background-color: #ff78c51c;
 }
 
-body:has(#home-page:not([hidden])) #drop-button {
+body:has(#home-page:not([hidden])) .drop-actions .btn-primary {
   position: relative;
   padding-right: 48px;
   padding-left: 48px;
@@ -2346,7 +2291,7 @@ body:has(#home-page:not([hidden])) .card-back .mark {
 
 .listing, .side, .vip-status-card, .referral-panel, .privacy-panel,
 .player-result, .stat, .roll-package, .frame-item, .soon-card,
-.case-card, .case-opening-card, .case-odds, .sheet, .select-bar {
+.case-card, .case-odds, .sheet, .select-bar {
   border-color: #9369bd55;
   background:
     linear-gradient(145deg, #2a1b43eF, #19122deF);
@@ -2427,27 +2372,6 @@ body:has(#home-page:not([hidden])) .card-back .mark {
   filter: drop-shadow(0 8px 12px #1a082c88) drop-shadow(0 0 12px #d786ff77);
   transform-origin: 50% 90%;
   animation: chest-float 2.8s ease-in-out infinite;
-}
-
-.case-opening-card {
-  border-color: #bd8aea;
-  border-radius: 26px;
-  background:
-    radial-gradient(ellipse at 50% 0, #b57bff42, transparent 68%),
-    linear-gradient(145deg, #2b1b46, #171027);
-  box-shadow: 0 24px 80px #000b, 0 0 34px #a44cff24;
-}
-
-.case-reel-window {
-  border-color: #bd8aea99;
-  border-radius: 16px;
-  background: #140e25;
-}
-
-.case-reel-item {
-  border-color: #9d71c955;
-  border-radius: 13px;
-  background: linear-gradient(135deg, #33224d, #211632);
 }
 
 .collection-meta {
@@ -3245,7 +3169,7 @@ body:has(#home-page:not([hidden])) .drop-timer { display: block; margin: 0 0 14p
 body:has(#home-page:not([hidden])) .drop-timer::before { display: none; }
 .drop-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .drop-actions .btn, .ticket-panel .btn { min-height: 46px; padding: 8px; font-size: 13px; }
-body:has(#home-page:not([hidden])) #drop-button { color: #272333; background: linear-gradient(110deg, #fff0c7, #d6bb84); box-shadow: 0 5px 18px #d9b87933; }
+body:has(#home-page:not([hidden])) .drop-actions .btn-primary { color: #272333; background: linear-gradient(110deg, #fff0c7, #d6bb84); box-shadow: 0 5px 18px #d9b87933; }
 .drop-error { margin: 0 0 8px; color: #ffb6b6; font-size: 12px; text-align: left; }
 .drop-retry { display: block; margin: 0 0 10px; border: 0; padding: 4px 0; color: #ffe2a4; background: none; text-decoration: underline; }
 .drop-retry[hidden], .drop-error[hidden] { display: none; }
@@ -3300,7 +3224,7 @@ body:has(#home-page:not([hidden])) .card-back .mark { color: #f5dcff; }
 #home-page .stock-heading strong { color: #f4e1ff; }
 #home-page .drop-slots i { border-radius: 3px; background: #503663; transform: none; }
 #home-page .drop-slots i.filled { background: #cf91ff; box-shadow: 0 0 9px #c879ff80; }
-body:has(#home-page:not([hidden])) #drop-button { color: #fff; background: linear-gradient(110deg, #9c54df, #bf75ed); box-shadow: 0 4px 18px #9d4fe34a; }
+body:has(#home-page:not([hidden])) .drop-actions .btn-primary { color: #fff; background: linear-gradient(110deg, #9c54df, #bf75ed); box-shadow: 0 4px 18px #9d4fe34a; }
 #home-page .btn-secondary { border-color: #ac76d46b; background: #392453c9; }
 #home-page .daily-banner { margin-top: 12px; }
 body:has(#home-page:not([hidden])) .topbar { border-color: #b77ce83b; background: #150b29e8; }
@@ -3337,7 +3261,7 @@ body {
 .main-nav button[data-page="home"] .nav-fab, body:has(#home-page:not([hidden])) .main-nav button[data-page="home"] .nav-fab { color: #dcc0f0; background: #38234e; box-shadow: none; }
 .main-nav button[data-page="home"].active .nav-fab, body:has(#home-page:not([hidden])) .main-nav button[data-page="home"].active .nav-fab { color: #fff; background: linear-gradient(145deg, #c98ef1, #914aca); box-shadow: 0 0 16px #b765ef77; }
 .btn { font-weight: 700; letter-spacing: .005em; }
-.btn-primary, body:has(#home-page:not([hidden])) #drop-button { color: #fff; background: linear-gradient(110deg, #9951d8, #bd76eb); box-shadow: inset 0 1px #ffffff38, 0 4px 18px #9d4fe33d; }
+.btn-primary, body:has(#home-page:not([hidden])) .drop-actions .btn-primary { color: #fff; background: linear-gradient(110deg, #9951d8, #bd76eb); box-shadow: inset 0 1px #ffffff38, 0 4px 18px #9d4fe33d; }
 .btn-secondary { color: #f2e7fa; border-color: #ac76d46b; background: #392453e8; }
 .tabs, .profile-tabs { gap: 4px; padding: 4px; border-color: #b47de65c; border-radius: 15px; background: #1a0e30ec; }
 .tabs button, .profile-tabs button { min-height: 40px; border-radius: 11px; font-weight: 650; color: #c0add2; }
@@ -3431,7 +3355,7 @@ body:has(#home-page:not([hidden])) .card-back .mark { width: 63%; height: 63%; c
   background: linear-gradient(125deg, #50247cdf, #311552ec);
   box-shadow: inset 0 1px #f5d6ff1f;
 }
-.sheet, .case-opening-card {
+.sheet {
   border-color: #d39bfa9c;
   background: linear-gradient(155deg, #512480f5, #2a124ef8);
   box-shadow: inset 0 1px #f5d6ff2e, 0 -12px 45px #12031d80;
@@ -3453,7 +3377,7 @@ body:has(#home-page:not([hidden])) .card-back .mark { width: 63%; height: 63%; c
 }
 .tabs, .profile-tabs { border-color: #d19af882; background: #311452e8; }
 .tabs button.active, .profile-tabs button.active { background: linear-gradient(135deg, #a35cda, #723ab6); border-color: #e0aeff9c; }
-.btn-primary, body:has(#home-page:not([hidden])) #drop-button {
+.btn-primary, body:has(#home-page:not([hidden])) .drop-actions .btn-primary {
   border-color: #e4b4ffad; background: linear-gradient(110deg, #a943ed, #c66bfa 55%, #963ee1);
   box-shadow: inset 0 1px #ffe9ff66, 0 4px 16px #a84df254;
 }
@@ -3504,7 +3428,7 @@ body:has(#home-page:not([hidden])) .daily-banner,
   background: linear-gradient(112deg, #3d116fef, #260a59f2 65%, #1c0849f2);
   box-shadow: inset 0 1px #f7d8ff35, 0 4px 14px #0a012555, 0 0 12px #ad43ff35;
 }
-.btn-primary, body:has(#home-page:not([hidden])) #drop-button {
+.btn-primary, body:has(#home-page:not([hidden])) .drop-actions .btn-primary {
   border: 1px solid #e1a1ffb3; border-radius: 15px; color: #fff;
   background: linear-gradient(180deg, #c05dff, #8d28d8); box-shadow: inset 0 1px #fff9, 0 3px 14px #ad40ff66;
 }
@@ -3569,7 +3493,12 @@ body:has(#home-page:not([hidden])) .daily-banner {
 body:has(#home-page:not([hidden])) .drop-timer { margin: 0 0 10px; color: #ead2f7; font-size: 12px; }
 #home-page .drop-actions .btn { min-height: 43px; }
 #home-page .ticket-panel { gap: 10px; padding: 10px 12px; }
-#home-page .ticket-item-art { background-image: url("currency-ticket.webp"), radial-gradient(circle, #b85bfc8c, #230a4dcc 75%); background-repeat: no-repeat; background-position: center; background-size: 49px auto, cover; }
+.ticket-item-art::before {
+  content: "";
+  width: 49px;
+  aspect-ratio: 1;
+  background: url("currency-ticket.webp") center / contain no-repeat;
+}
 #home-page .ticket-copy { display: grid; flex: 1; gap: 2px; min-width: 0; }
 #home-page .ticket-copy > span { color: #fff4ff; font-size: 14px; font-weight: 700; letter-spacing: 0; }
 #home-page .ticket-copy small { color: #e4c8f3; font-size: 10px; line-height: 1.25; }
@@ -3579,7 +3508,7 @@ body:has(#home-page:not([hidden])) .daily-banner { min-height: 70px; padding: 9p
 #home-page .daily-icon { flex: 0 0 40px; width: 40px; height: 40px; padding: 8px; border: 1px solid #c86aff70; border-radius: 11px; color: #f3c9ff; background: radial-gradient(circle, #ac52e98c, #421672); filter: drop-shadow(0 0 5px #c86dff66); }
 body:has(#home-page:not([hidden])) .daily-banner p { color: #fff1ff; font-size: 12px; font-weight: 650; }
 #home-page .daily-banner .btn { border-radius: 13px; background: linear-gradient(180deg, #b750f0, #7923bb); }
-@media (max-width: 340px) { .home-item-art { flex-basis: 46px; width: 46px; height: 46px; } #home-page .ticket-item-art { background-size: 40px auto, cover; } #home-page .stock-title strong, #home-page .ticket-copy > span { font-size: 12px; } }
+@media (max-width: 340px) { .home-item-art { flex-basis: 46px; width: 46px; height: 46px; } .ticket-item-art::before { width: 40px; } #home-page .stock-title strong, #home-page .ticket-copy > span { font-size: 12px; } }
 
 /* Цветные иконки в стиле игровых валют. */
 .main-nav button[data-page] > .icon,
@@ -3847,7 +3776,7 @@ body:has(#home-page:not([hidden])) .daily-banner p, .roll-package strong { color
 #home-page .drop-slots i { height: 5px; border-radius: 5px; background: #866b9e88; }
 #home-page .drop-slots i.filled { background: linear-gradient(90deg, #d284f4, #f6cfff); box-shadow: 0 0 6px #d28df568; }
 .btn { border-radius: 12px; font-weight: 700; }
-.btn-primary, body:has(#home-page:not([hidden])) #drop-button {
+.btn-primary, body:has(#home-page:not([hidden])) .drop-actions .btn-primary {
   border: 1px solid #f1c58caa; color: #fff7ff;
   background: linear-gradient(180deg, #ad56dd, #7c32b5);
   box-shadow: inset 0 1px #fff5, 0 3px 9px #1c073b66;
@@ -3901,7 +3830,7 @@ body:has(#home-page:not([hidden])) .section-label::before, .page-view:not(#home-
 .topbar, body:has(#home-page:not([hidden])) .topbar { border-color: #cda6d85e; background: #1c0d39e8; }
 .chip, body:has(#home-page:not([hidden])) .chip { border-color: #d7a9b773; background: linear-gradient(140deg, #40255ee8, #21113ee8); box-shadow: inset 0 1px #fff2; }
 .main-nav, body:has(#home-page:not([hidden])) .main-nav { border-color: #d8add18a; background: linear-gradient(110deg, #34204ceF, #1f103beF 52%, #34204ceF); box-shadow: inset 0 1px #fff3, 0 8px 24px #09021c99; }
-.sheet, .case-opening-card { border-color: #dbaddf99; background: linear-gradient(155deg, #493061fa, #211038fa); }
+.sheet { border-color: #dbaddf99; background: linear-gradient(155deg, #493061fa, #211038fa); }
 @media (max-width: 340px) { .page-banner { padding-right: 31%; } .page-banner::after { width: 25vw; right: 6px; } }
 
 /* Типографика лунного сада: выразительные заголовки и читаемый интерфейс. */
@@ -4235,7 +4164,7 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 #crystals-page .frame-item-actions .btn { min-height: 36px; padding: 0 10px; font-size: 10px; }
 #crystals-page .frame-shop-preview { padding: 14px; }
 #crystals-page .case-card { gap: 12px; }
-#crystals-page [hidden], .case-overlay [hidden] { display: none !important; }
+#crystals-page [hidden] { display: none !important; }
 
 /* Подтверждение покупки и успешный результат. */
 .shop-dialog[hidden], .shop-dialog [hidden] { display: none !important; }
@@ -4279,74 +4208,9 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 .shop-dialog-art--case { display: grid; place-items: center; background-image: none; }
 .shop-dialog-art .shop-dialog-case-chest { width: 110px; height: 92px; animation: none; }
 
-/* Открытие кейса: сундук, вспышка и фактическая награда. */
-.case-overlay {
-  padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));
-  background: #0b0323df; backdrop-filter: blur(8px);
-}
-.case-opening-card {
-  position: relative; overflow: hidden; gap: 10px; max-height: 100%; overflow-y: auto;
-  padding: 22px 18px 18px; border: 1px solid #e0b1eeb0; border-radius: 22px;
-  background: radial-gradient(ellipse at 50% 35%, #78439c7a, transparent 60%), linear-gradient(155deg, #3d1c5af7, #1d0c3efa);
-  box-shadow: inset 0 1px #ffe9ff4d, 0 20px 60px #080113b3;
-}
-.case-opening-card .drop-eyebrow { color: #f3d3a1; font-size: 10px; letter-spacing: .14em; }
-.case-opening-card h2 { color: #fff6ff; font-family: "Chizu Display", Georgia, serif; font-size: 28px; line-height: 1.1; }
-.case-reveal-stage { position: relative; display: grid; place-items: center; width: min(100%, 240px); height: 215px; margin: 0 auto; isolation: isolate; }
-.case-reveal-halo { position: absolute; inset: 5%; border-radius: 50%; background: radial-gradient(circle, #e9b2ff91, #a25feb52 36%, transparent 70%); opacity: .8; }
-.case-reveal-ring { position: absolute; inset: 13%; border: 1px solid #f2d1ff7a; border-radius: 50%; box-shadow: 0 0 0 9px #d8a7ff10, inset 0 0 18px #d894ff30; }
-.case-opening-chest, .case-reward-art { position: absolute; display: grid; place-items: center; width: 156px; height: 140px; }
-.case-opening-chest .case-chest { width: 156px; height: 130px; animation: none; filter: drop-shadow(0 8px 12px #18062588); }
-.case-overlay.is-loading .case-opening-chest { animation: case-wait-float 2.4s ease-in-out infinite; }
-.case-overlay.is-opening .case-opening-chest { animation: case-unlock 1.6s ease-in forwards; }
-.case-overlay.is-opening .case-reveal-halo { animation: case-burst 1.8s ease-out forwards; }
-.case-overlay.is-opening .case-reveal-ring { animation: case-ring-expand 1.8s ease-out forwards; }
-.case-reward-art { width: 132px; height: 132px; opacity: 0; transform: translateY(10px) scale(.8); background-position: center; background-repeat: no-repeat; background-size: contain; }
-.case-reward-art--dust { background-image: url("currency-dust.webp"); }
-.case-reward-art--ticket { background-image: url("currency-ticket.webp"); }
-.case-reward-art--frame { background-image: url("game-icon-summon-clear.webp"); }
-.case-overlay.is-revealed .case-opening-chest { opacity: 0; }
-.case-overlay.is-revealed .case-reward-art { opacity: 1; transform: none; transition: opacity .3s ease, transform .35s ease; }
-.case-reveal-sparks { position: absolute; inset: 0; pointer-events: none; }
-.case-reveal-sparks i { position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; border-radius: 50%; background: #fff0c1; opacity: 0; }
-.case-overlay.is-opening .case-reveal-sparks i { animation: case-spark-flight 1.5s .3s ease-out both; }
-.case-reveal-sparks i:nth-child(1) { --spark-x: -78px; --spark-y: -65px; }
-.case-reveal-sparks i:nth-child(2) { --spark-x: 68px; --spark-y: -74px; }
-.case-reveal-sparks i:nth-child(3) { --spark-x: 88px; --spark-y: 0px; }
-.case-reveal-sparks i:nth-child(4) { --spark-x: 65px; --spark-y: 66px; }
-.case-reveal-sparks i:nth-child(5) { --spark-x: -72px; --spark-y: 58px; }
-.case-reveal-sparks i:nth-child(6) { --spark-x: -88px; --spark-y: -5px; }
-.case-opening-card .case-result { min-height: 35px; color: #f9e5bb; font-size: 13px; line-height: 1.4; }
-.case-opening-card #case-close { min-height: 44px; }
-@keyframes case-wait-float { 0%, 100% { transform: translateY(1px); } 50% { transform: translateY(-5px); } }
-@keyframes case-unlock { 0%, 25% { transform: translateY(0) rotate(0); opacity: 1; } 35% { transform: rotate(-5deg); } 45% { transform: rotate(5deg); } 55% { transform: rotate(-4deg); } 65% { transform: rotate(4deg); opacity: 1; } 100% { transform: translateY(-7px) scale(1.05); opacity: 1; } }
-@keyframes case-burst { 0%, 45% { opacity: .7; transform: scale(.8); } 70% { opacity: 1; transform: scale(1.2); } 100% { opacity: .7; transform: scale(1); } }
-@keyframes case-ring-expand { 0%, 45% { opacity: .75; transform: scale(.9); } 100% { opacity: 0; transform: scale(1.35); } }
-@keyframes case-spark-flight { 0%, 25% { opacity: 0; transform: translate(0, 0) scale(.5); } 45% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--spark-x), var(--spark-y)) scale(1.4); } }
-@media (prefers-reduced-motion: reduce) {
-  .case-overlay.is-loading .case-opening-chest, .case-overlay.is-opening .case-opening-chest,
-  .case-overlay.is-opening .case-reveal-halo, .case-overlay.is-opening .case-reveal-ring,
-  .case-overlay.is-opening .case-reveal-sparks i { animation: none; }
-  .case-overlay.is-revealed .case-reward-art { transition: none; }
-}
-@media (max-height: 600px) { .case-reveal-stage { height: 145px; } .case-opening-card { gap: 6px; padding: 14px; } }
-
-.case-opening-card h2:focus { outline: none; }
 .case-art .case-chest-image { display: block; width: min(180px, 100%); height: 132px; object-fit: contain; animation: chest-float 2.8s ease-in-out infinite; }
 .shop-dialog-art--case { background: url("premium-case.webp") center / contain no-repeat; }
-.case-opening-chest { background: url("premium-case.webp") center / contain no-repeat; }
 @media (prefers-reduced-motion: reduce) { .case-art .case-chest-image { animation: none; } }
-/* Крышка сундука поднимается перед показом награды. */
-.case-opening-chest { background: none; perspective: 420px; }
-.case-opening-chest::before, .case-opening-chest::after {
-  position: absolute; inset: 0; background: url("premium-case.webp") center / contain no-repeat; content: "";
-}
-.case-opening-chest::before { clip-path: inset(0 0 50% 0); transform-origin: 50% 50%; }
-.case-opening-chest::after { clip-path: inset(50% 0 0 0); }
-.case-overlay.is-opening .case-opening-chest::before { animation: case-lid-open 1.6s ease-in-out forwards; }
-@keyframes case-lid-open { 0%, 45% { transform: rotateX(0); } 75%, 100% { transform: rotateX(-45deg) translateY(-4px); } }
-@media (prefers-reduced-motion: reduce) { .case-overlay.is-opening .case-opening-chest::before { animation: none; } }
-
 /* R and SR use a quiet, static treatment; only SSR and UR animate. */
 .card.rarity-common::before, .card.rarity-rare::before, .card.rarity-epic::before { animation: none; }
 .card.rarity-legendary .card-fx-sheen { opacity: .65; }
@@ -4579,7 +4443,22 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 .sheet.sheet--card .card-more-actions .sheet-actions { max-height: min(30dvh, 180px); overflow-y: auto; }
 .sheet.sheet--card .card-more-actions:not([open]) .sheet-actions { display: none; }
 
-.sheet.sheet--card #sheet-body > div { display: contents; }
+.sheet.sheet--card #sheet-body {
+  display: block;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  pointer-events: auto;
+}
+.sheet.sheet--card #sheet-body > .card-detail-content {
+  display: grid;
+  justify-items: center;
+  align-content: safe center;
+  min-height: 100%;
+  gap: 8px;
+  padding-block: 44px 10px;
+}
+.card-lock-status:empty, .gift-player-results:empty { display: none; }
+.gift-player-results { display: grid; gap: 6px; }
 
 /* Пока иллюстрация рубашки загружается, показываем запасное оформление. */
 .drop-card-back, .drop-overlay.is-opening .drop-card-back {
@@ -4602,10 +4481,6 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 
 
 /* Curated packs share the same rendered designs as equipped cards. */
-.case-reward-art--frame:has(img) { background-image: none; width: 112px; height: 168px; border-radius: 9px; }
-.case-reward-art--frame > img { display: block; width: 100%; height: 100%; object-fit: contain; }
-.case-overlay.is-revealed .frame-live-fx::before,
-.case-overlay.is-revealed .frame-live-fx::after { animation-play-state: running; }
 .frame-pack { min-width: 0; display: grid; gap: 10px; }
 .frame-pack + .frame-pack { margin-top: 18px; padding-top: 18px; border-top: 1px solid #bca1d52b; }
 .frame-pack h3, .frame-pack > p { margin: 0; }
@@ -4687,6 +4562,41 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
   filter: drop-shadow(0 0 3px var(--fx-color));
 }
 .frame-fx-corner:nth-child(even) > img { animation-delay: -.9s; }
+.frame-live-fx--cinnabar::after {
+  background: radial-gradient(circle at 8% 5%, #ffe1ab, transparent 5%),
+    radial-gradient(circle at 92% 5%, #ffe1ab, transparent 5%),
+    radial-gradient(circle at 8% 95%, #ffe1ab, transparent 5%),
+    radial-gradient(circle at 92% 95%, #ffe1ab, transparent 5%);
+  animation-duration: 4.8s;
+}
+.frame-live-fx--porcelain::before {
+  background: linear-gradient(118deg, transparent 35%, var(--fx-color) 46%, #fff 50%, transparent 62%);
+  background-size: 250% 250%;
+  animation-name: frame-ice-shimmer;
+  animation-duration: 5s;
+}
+.frame-live-fx--porcelain::after {
+  background: radial-gradient(circle at 7% 50%, #fff, transparent 4%),
+    radial-gradient(circle at 93% 50%, #fff, transparent 4%);
+  animation-duration: 5s;
+}
+.frame-live-fx--clockwork .frame-fx-corner > img {
+  animation-name: frame-ornament-crystal;
+  animation-duration: 3.5s;
+}
+.frame-live-fx--opal::before {
+  background: conic-gradient(from var(--frame-energy-angle), transparent 8%,
+    #8fffe4 18%, #d4a4ff 25%, transparent 37%, transparent 62%, #f58cff 72%, #8fffe4 80%, transparent 92%);
+  animation-duration: 6s;
+}
+.frame-live-fx--opal .frame-fx-corner > img {
+  animation-name: frame-opal-play-of-color;
+  animation-duration: 4.2s;
+}
+@keyframes frame-opal-play-of-color {
+  from { filter: hue-rotate(-14deg) brightness(1); }
+  to { filter: hue-rotate(22deg) brightness(1.22) drop-shadow(0 0 3px var(--fx-color)); }
+}
 .frame-live-fx[data-theme="astral"] .frame-fx-corner > img { animation-name: frame-ornament-orbit; animation-duration: 10s; animation-timing-function: linear; }
 .frame-live-fx[data-theme="ice_prism"] .frame-fx-corner > img,
 .frame-live-fx[data-theme="neon"] .frame-fx-corner > img,
@@ -4695,7 +4605,6 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 .sheet-card .frame-fx-corner > img, .card:hover .frame-fx-corner > img,
 .card:focus-visible .frame-fx-corner > img, .sheet:not([hidden]) .frame-picker-preview .frame-fx-corner > img,
 #frames-pane:not([hidden]) .frame-shop-visual .frame-fx-corner > img,
-.case-overlay.is-revealed .frame-fx-corner > img,
 .frame-roulette-overlay:not([hidden]) .frame-fx-corner > img { animation-play-state: running; }
 .page-hidden .frame-fx-corner > img { animation-play-state: paused !important; }
 .frame-roulette-award { position: relative; width: 112px; margin-inline: auto; border-radius: 9px; }
@@ -4747,7 +4656,8 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 .frame-roulette-tile { flex: 0 0 108px; width: 108px; display: grid; gap: 6px; align-content: start; color: #f3dfef; font-size: 10px; }
 .frame-roulette-tile img { display: block; width: 108px; height: 162px; object-fit: contain; }
 .frame-roulette-award:empty { display: none; }
-.frame-roulette-award img { display: block; width: 112px; height: 168px; object-fit: contain; margin: auto; }
+.frame-roulette-award > img { display: block; width: 112px; height: 168px; object-fit: contain; margin: auto; }
+.frame-roulette-tile > .roulette-resource, .frame-roulette-award > .roulette-resource { padding: 24px; }
 #frame-roulette-result { font-size: 14px; line-height: 1.5; color: #ffe7b3; }
 
 /* The mask uses the same framing and scale as the card bitmap. */
@@ -4862,3 +4772,140 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 @keyframes astral-astrolabe { from{transform:rotate(-1.5deg)} to{transform:rotate(1.5deg)} }
 @keyframes forest-branch-wind { from{transform:rotate(-1deg) translateX(-.3px)} to{transform:rotate(1deg) translateX(.5px)} }
 @keyframes gothic-window-light { from{transform:scale(.998);filter:hue-rotate(-9deg) brightness(.8)} to{transform:scale(1.002);filter:hue-rotate(12deg) brightness(1.4)} }
+
+.print-number, .print-seal {
+  display: inline-block;
+  width: fit-content;
+  font-size: .8rem;
+  font-variant-numeric: tabular-nums;
+}
+.print-seal {
+  border: 1px solid #d6ad6377;
+  border-radius: 999px;
+  background: #d6ad631a;
+  color: #ffdfa4;
+  padding: 3px 9px;
+}
+#market-special-numbers[aria-pressed="true"] {
+  border-color: #dda8ff;
+  color: #f1d7ff;
+}
+
+.gift-composer, .gift-composer label, .gift-envelope {
+  display: grid;
+  gap: 10px;
+}
+.gift-envelope {
+  justify-items: center;
+  padding: 18px 12px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.gift-envelope p { white-space: pre-wrap; margin: 0; }
+.gift-envelope-seal {
+  display: grid;
+  place-items: center;
+  width: 136px;
+  aspect-ratio: 1.5;
+  border: 1px solid #aa82e6;
+  border-radius: 12px;
+  background: linear-gradient(151deg, transparent 49%, #b794e58a 50%, transparent 51%) left top / 50% 55% no-repeat,
+    linear-gradient(209deg, transparent 49%, #b794e58a 50%, transparent 51%) right top / 50% 55% no-repeat,
+    linear-gradient(150deg, #493264, #22152f);
+  color: #ffe1a4;
+  font-size: 2.1rem;
+  box-shadow: 0 0 28px #c294ed44;
+}
+.gift-print-flash {
+  position: absolute;
+  inset: auto 0 12px;
+  margin-inline: auto;
+  background: #261942;
+  z-index: 2;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .gift-print-flash { animation: gift-print-flash .75s ease-out; }
+}
+@keyframes gift-print-flash {
+  35% { box-shadow: 0 0 22px 5px #ffdc8c; }
+}
+
+#home-page .drop-actions[hidden], #home-page .drop-actions .btn[hidden] { display: none; }
+#home-page .drop-actions.single { grid-template-columns: minmax(0, 180px); }
+
+.card-detail-nav, .copy-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.copy-entry > label { flex: 1; min-width: 0; }
+.card-detail-swipable { touch-action: pan-y; }
+
+.wallet-actions { display: grid; gap: 8px; }
+.ticket-quick-amounts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(64px, 1.5fr); gap: 6px; }
+.ticket-quick-amounts .btn { min-width: 0; padding-inline: 6px; }
+.ticket-quick-amounts .btn[aria-pressed="true"] { border-color: #e2b5fd; }
+.ticket-quick-amounts input { min-width: 0; }
+
+.market-filters { display: flex; gap: 6px; flex-wrap: wrap; margin-block: 8px; }
+.market-filters .btn { font-size: .8rem; min-height: 36px; padding: 6px 9px; }
+.market-filters [aria-pressed="true"] { border-color: #dda8ff; color: #f1d7ff; }
+
+.card-grid.compact-collection {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+}
+.compact-card {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+  border-radius: 12px;
+  background: #c8a1f414;
+}
+.compact-card.selected { box-shadow: inset 0 0 0 1px #d59bfa; }
+.compact-card .card { max-width: 54px; margin: 0; }
+.compact-card-description {
+  display: grid;
+  text-align: left;
+  gap: 3px;
+  align-content: center;
+  height: 100%;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  overflow-wrap: anywhere;
+}
+.compact-card-description > span { font-size: .8rem; }
+
+.wallet-history { display: grid; gap: 8px; }
+.wallet-history h3 { margin: 12px 0 0; }
+.wallet-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; padding: 9px; border-radius: 10px; background: #b89aea19; }
+.wallet-entry time, .wallet-entry p { grid-column: 1 / -1; margin: 0; }
+.wallet-entry .btn { justify-self: start; }
+.wallet-credit { color: #b7ebce; }
+.wallet-debit { color: #ffd9c2; }
+
+.operation-recovery {
+  position: fixed;
+  z-index: 65;
+  left: 50%;
+  bottom: calc(80px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(94%, 440px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #332249;
+  border: 1px solid #9370b7;
+  border-radius: 12px;
+  font-size: .8rem;
+}
+.operation-recovery[hidden] { display: none; }
+.operation-recovery .btn { flex-shrink: 0; max-width: 55%; font-size: .78rem; }
