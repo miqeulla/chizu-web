@@ -392,10 +392,17 @@
         <span></span><span></span><span></span><span></span>
       </div>
       <div class="hero">
-        <div id="drop-ring" class="drop-ring" aria-hidden="true">
-          <span class="summon-ring-track"></span>
-          <span class="summon-ring-stars"></span>
-          <div class="card-back card-back-illustrated"><img class="home-summon-image" data-static-src="summon-card-hero.webp" alt="" decoding="async" fetchpriority="high"></div>
+        <div id="drop-ring" class="drop-ring">
+          <span class="summon-ring-track" aria-hidden="true"></span>
+          <span class="summon-ring-stars" aria-hidden="true"></span>
+          <div id="home-summon" class="card-back card-back-illustrated" role="group" tabindex="0"
+               aria-label="Карта призыва. Вращайте перетаскиванием или клавишами со стрелками. Escape сбрасывает наклон.">
+            <div class="home-summon-motion">
+              <div class="home-summon-card">
+                <img class="home-summon-image" data-static-src="summon-card-hero.webp" alt="" decoding="async" fetchpriority="high" draggable="false">
+              </div>
+            </div>
+          </div>
         </div>
         <div class="stock-panel" aria-label="Бесплатные открытия">
           <div class="stock-heading">

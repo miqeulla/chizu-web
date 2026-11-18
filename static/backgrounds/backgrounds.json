@@ -4,5 +4,35 @@
     "title": "Луна",
     "preview": "Lunar.png",
     "vip": false
+  },
+  {
+    "key": "moonlit-sakura",
+    "title": "Лунная сакура",
+    "preview": "moonlit-sakura.webp",
+    "vip": false
+  },
+  {
+    "key": "rainy-neon",
+    "title": "Город после дождя",
+    "preview": "rainy-neon.webp",
+    "vip": false
+  },
+  {
+    "key": "astral-sea",
+    "title": "Астральное море",
+    "preview": "astral-sea.webp",
+    "vip": false
+  },
+  {
+    "key": "jade-forest",
+    "title": "Нефритовый лес",
+    "preview": "jade-forest.webp",
+    "vip": false
+  },
+  {
+    "key": "amber-sunset",
+    "title": "Янтарный закат",
+    "preview": "amber-sunset.webp",
+    "vip": false
   }
 ]

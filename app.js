@@ -965,6 +965,60 @@
     return button;
   }
 
+  function bindHomeSummonTilt() {
+    const card = el("home-summon");
+    const arrowSteps = new Map([
+      ["ArrowLeft", [-8, 0]],
+      ["ArrowRight", [8, 0]],
+      ["ArrowUp", [0, 8]],
+      ["ArrowDown", [0, -8]],
+    ]);
+    let drag = null;
+    let tiltX = 0;
+    let tiltY = 0;
+
+    function setTilt(x, y) {
+      tiltX = Math.max(-32, Math.min(32, x));
+      tiltY = Math.max(-42, Math.min(42, y));
+      card.style.setProperty("--card-tilt-x", `${tiltX}deg`);
+      card.style.setProperty("--card-tilt-y", `${tiltY}deg`);
+    }
+
+    card.addEventListener("pointerdown", (event) => {
+      if (drag || !event.isPrimary || event.button !== 0) return;
+      card.setPointerCapture(event.pointerId);
+      drag = { id: event.pointerId, x: event.clientX, y: event.clientY, tiltX, tiltY };
+      card.classList.add("is-dragging");
+    });
+    card.addEventListener("pointermove", (event) => {
+      if (drag?.id !== event.pointerId) return;
+      setTilt(drag.tiltX - (event.clientY - drag.y) * 0.5, drag.tiltY + (event.clientX - drag.x) * 0.5);
+    });
+    function endDrag(event) {
+      if (drag?.id !== event.pointerId) return;
+      drag = null;
+      card.classList.remove("is-dragging");
+      setTilt(0, 0);
+    }
+    ["pointerup", "pointercancel", "lostpointercapture"].forEach((type) => {
+      card.addEventListener(type, endDrag);
+    });
+    card.addEventListener("keydown", (event) => {
+      if (drag) return;
+      const step = arrowSteps.get(event.key);
+      if (step) {
+        event.preventDefault();
+        setTilt(tiltX + step[1], tiltY + step[0]);
+      } else if (event.key === "Escape" && (tiltX || tiltY)) {
+        event.stopPropagation();
+        setTilt(0, 0);
+      }
+    });
+    card.addEventListener("blur", () => {
+      if (!drag) setTilt(0, 0);
+    });
+  }
+
   function updateDropButton() {
     const stock = state.profile?.free_drops;
     const free = stock?.available ?? 0;
@@ -3099,7 +3153,7 @@
 
   function loadBackgrounds() {
     if (!state.backgroundCatalogRequest) {
-      state.backgroundCatalogRequest = fetch(new URL("static/backgrounds/backgrounds.json", staticBase))
+      state.backgroundCatalogRequest = fetch(new URL("static/backgrounds/backgrounds.json", staticBase), { cache: "no-cache" })
         .then(async (res) => {
           if (!res.ok) throw new Error(`Не удалось загрузить фоны (${res.status}).`);
           const backgrounds = await res.json();
@@ -4616,6 +4670,7 @@
     state.marketSearchTimer = setTimeout(() => loadMarket().catch(showError), 250);
   });
   el("market-more").addEventListener("click", () => loadMarket(state.marketNextPage).catch(showError));
+  bindHomeSummonTilt();
   el("drop-all-button").addEventListener("click", () => openDrop(true));
   el("drop-button").addEventListener("click", () => openDrop());
   el("drop-retry").addEventListener("click", () => {
