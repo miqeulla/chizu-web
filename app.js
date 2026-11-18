@@ -1,4 +1,12 @@
 (() => {
+  if (new URLSearchParams(location.search).get("monitor") === "1") {
+    const source = new URL(document.currentScript.src);
+    const script = document.createElement("script");
+    script.src = new URL(`monitor.js${source.search}`, source).href;
+    script.onerror = () => window.ChizuLoader?.fail("Не удалось загрузить мониторинг. Откройте его заново.");
+    document.body.append(script);
+    return;
+  }
   const DROP_COOLDOWN_SEC = 3600;
   const DROP_MIN_OPEN_MS = 1200;
   const RARITIES = [

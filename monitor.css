@@ -1,0 +1,20 @@
+body.monitor-page{margin:0;display:block;overflow:auto;background:#100c1c;color:#f5efff;font:15px/1.5 system-ui,sans-serif;min-height:100vh}
+body.monitor-page::before{display:none}
+#chizu-monitor{max-width:1200px;margin:auto;padding:calc(20px + env(safe-area-inset-top)) 18px calc(30px + env(safe-area-inset-bottom))}
+#chizu-monitor *{box-sizing:border-box}#chizu-monitor header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px}
+#chizu-monitor h1{font-size:30px;line-height:1.2;margin:6px 0}#chizu-monitor h2{font-size:20px;margin:0 0 14px}#chizu-monitor h3{font-size:15px;margin:0 0 6px}
+#chizu-monitor .eyebrow{font-size:11px;letter-spacing:.2em;color:#c6a5ec}#chizu-monitor .muted,#chizu-monitor small,#chizu-monitor footer{color:#b9abc9;font-size:12px}
+#chizu-monitor button,#chizu-monitor select{font:inherit;color:inherit;background:#2b2041;border:1px solid #59436f;border-radius:10px;padding:9px 12px;cursor:pointer;min-height:42px}
+#chizu-monitor button:disabled{opacity:.5;cursor:wait}#chizu-monitor button:focus-visible,#chizu-monitor select:focus-visible{outline:2px solid #d7afff;outline-offset:3px}
+#chizu-monitor .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center}#chizu-monitor label{display:flex;gap:10px;align-items:center}
+#mon-message{min-height:24px;color:#d4c4e9}#chizu-monitor section{margin:30px 0;padding-top:20px;border-top:1px solid #392b48}
+#chizu-monitor .health{display:flex;flex-wrap:wrap;gap:8px 20px;padding:16px;border:1px solid #466b60;border-radius:14px;background:#162823}
+#chizu-monitor .health strong{font-size:18px}#chizu-monitor .health span{color:#c0d5cc}#chizu-monitor .health.warning{border-color:#98744a;background:#302419}#chizu-monitor .health ul{width:100%;margin:0;padding-left:22px}
+#chizu-monitor .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:18px 0}
+#chizu-monitor .metric{min-width:0;background:#1c142b;border:1px solid #3d2c52;border-radius:14px;padding:15px;display:flex;flex-direction:column;gap:6px}
+#chizu-monitor .metric>span{font-size:13px;color:#c9b9dc}#chizu-monitor .metric strong{font-size:25px;line-height:1.3;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+#chizu-monitor .table-scroll{overflow:auto;max-height:520px;border:1px solid #392b48;border-radius:10px}#chizu-monitor table{border-collapse:collapse;width:100%;font-size:13px;text-align:left}
+#chizu-monitor th,#chizu-monitor td{padding:10px 12px;border-bottom:1px solid #30223f;vertical-align:top}#chizu-monitor th{position:sticky;top:0;background:#271c36;color:#d8c3ee;white-space:nowrap}#chizu-monitor td{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+#chizu-monitor .charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}#chizu-monitor .chart{margin:22px 0;min-width:0}
+#chizu-monitor .bars{display:flex;gap:6px;overflow:auto;align-items:flex-end;padding-top:6px}#chizu-monitor .bar-column{min-width:28px;flex:1;text-align:center;font-size:10px;color:#c7b8db}#chizu-monitor .bar-track{height:110px;display:flex;align-items:flex-end;background:#20172e;margin:4px 0}#chizu-monitor .bar-track i{display:block;width:100%;background:#ac82da;min-height:1px;border-radius:3px 3px 0 0}#chizu-monitor .bar-column small{font-size:9px;white-space:nowrap}
+@media(max-width:480px){#chizu-monitor{padding-left:12px;padding-right:12px}#chizu-monitor .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}#chizu-monitor .metric{padding:12px}#chizu-monitor .metric strong{font-size:22px}#chizu-monitor label{width:100%;flex-wrap:wrap}#chizu-monitor select{flex:1;min-width:0}#chizu-monitor h1{font-size:26px}}

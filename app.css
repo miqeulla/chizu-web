@@ -3998,9 +3998,20 @@ body:has(#home-page:not([hidden])) .topbar-brand { font-family: "Chizu Display",
 
 /* Коллекция: поиск, фильтры и карточная галерея. */
 #collection-page { --collection-secondary-text: #efe0f6; }
-#collection-page .page-banner { min-height: 64px; margin-bottom: 8px; padding: 10px 68px 10px 16px; }
-#collection-page .page-banner h1 { margin: 0; }
-#collection-page .page-banner::after { right: 12px; width: 46px; }
+#collection-page .page-banner {
+  min-height: 80px;
+  margin-bottom: 12px;
+  padding: 16px 88px 16px 20px;
+  border-color: #d8add14d;
+  background: linear-gradient(105deg, #27143bea, #25143cce);
+  box-shadow: inset 0 1px #ffffff12;
+}
+#collection-page .page-banner h1 {
+  margin: 0;
+  font-size: clamp(24px, 6vw, 28px);
+  line-height: 1.2;
+}
+#collection-page .page-banner::after { right: 18px; width: 52px; }
 #collection-page [hidden] { display: none !important; }
 #collection-page .hint, #collection-page .collection-help { color: var(--collection-secondary-text); font-size: 13px; line-height: 1.45; }
 #collection-page .collection-tools {
