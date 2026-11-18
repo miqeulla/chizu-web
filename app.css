@@ -1096,12 +1096,22 @@ img {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
-.frame-shop-preview { display: grid; gap: 8px; justify-items: start; }
-.frame-shop-preview[hidden] { display: none; }
-.frame-shop-preview select { width: 100%; max-width: 400px; padding: 10px; }
+.frame-shop-preview {
+  position: fixed; inset: auto 0 0; width: min(100%, 520px);
+  max-height: calc(100dvh - 16px); margin: 0 auto;
+  padding: 14px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  overflow-y: auto; overscroll-behavior: contain;
+  border: 1px solid #dbaddf99; border-radius: 20px 20px 0 0;
+  color: var(--text); background: #28163e;
+}
+.frame-shop-preview[open] { display: grid; gap: 8px; }
+.frame-shop-preview:not([open]), .frame-shop-preview [hidden] { display: none; }
+.frame-shop-preview::backdrop { background: #0b0814cc; }
+.frame-shop-preview .sheet-head, #frame-shop-preview-status { margin: 0; }
+.frame-shop-preview select { width: 100%; min-height: 44px; padding: 8px 10px; }
+.frame-shop-preview .btn { min-height: 44px; }
+html:has(.frame-shop-preview[open]) { overflow: hidden; }
 .frame-shop-pages { display: flex; align-items: center; gap: 12px; }
-.frame-shop-preview img { width: min(100%, 240px); height: auto; border-radius: 12px; }
-.frame-item.is-previewed { outline: 2px solid var(--frame-color, var(--rarity-common)); }
 .frame-preview {
   display: grid;
   place-items: center;
@@ -3345,7 +3355,7 @@ body:has(#home-page:not([hidden])) .card-back .mark { width: 63%; height: 63%; c
 #home-page .stock-panel, #home-page .ticket-panel, #home-page .daily-banner,
 .listing, .side, .vip-status-card, .referral-panel, .privacy-panel,
 .player-result, .stat, .roll-package, .frame-item, .soon-card,
-.case-card, .case-odds, .select-bar, .frame-shop-preview {
+.case-card, .case-odds, .select-bar {
   border: 1px solid #d095fa91;
   border-radius: 16px;
   background: linear-gradient(125deg, #552585ed 0%, #37165fec 55%, #2d1355f0 100%);
@@ -3424,7 +3434,7 @@ body:has(#home-page:not([hidden])) .daily-banner { border-color: #d095fa91; back
 body:has(#home-page:not([hidden])) .daily-banner,
 .listing, .side, .vip-status-card, .referral-panel, .privacy-panel,
 .player-result, .stat, .roll-package, .frame-item, .soon-card,
-.case-card, .case-odds, .select-bar, .frame-shop-preview {
+.case-card, .case-odds, .select-bar {
   border: 1px solid #be64fa9c; border-radius: 15px;
   background: linear-gradient(112deg, #3d116fef, #260a59f2 65%, #1c0849f2);
   box-shadow: inset 0 1px #f7d8ff35, 0 4px 14px #0a012555, 0 0 12px #ad43ff35;
@@ -3564,7 +3574,7 @@ body:has(#home-page:not([hidden])) .card-back.card-back-illustrated {
 body:has(#home-page:not([hidden])) .daily-banner,
 .listing, .side, .vip-status-card, .referral-panel, .privacy-panel,
 .player-result, .stat, .roll-package, .frame-item, .soon-card,
-.case-card, .case-odds, .select-bar, .frame-shop-preview {
+.case-card, .case-odds, .select-bar {
   border-color: #d290f7a8;
   background:
     radial-gradient(ellipse at 3% 0%, #c474ff38, transparent 48%),
@@ -3752,7 +3762,7 @@ body:has(#home-page:not([hidden])) .card-back.card-back-illustrated {
 body:has(#home-page:not([hidden])) .daily-banner,
 .listing, .side, .vip-status-card, .referral-panel, .privacy-panel,
 .player-result, .stat, .roll-package, .frame-item, .soon-card,
-.case-card, .case-odds, .select-bar, .frame-shop-preview {
+.case-card, .case-odds, .select-bar {
   border: 1px solid var(--ui-panel-edge); border-radius: 16px;
   background: linear-gradient(120deg, #4a246dc9 0%, #2c1254e3 45%, #1d0b3ee8 100%);
   box-shadow: inset 0 1px #fff0ff38, inset 0 0 0 1px #f3c9ff0d, 0 7px 18px #0b021c59;
@@ -4051,11 +4061,13 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 #collection-page #collection-cards { gap: 10px; }
 #collection-page #collection-cards .card { border-radius: 12px; box-shadow: 0 5px 14px #0b021c75, 0 0 8px color-mix(in srgb, var(--card-glow) 32%, transparent); }
 #collection-page #collection-cards .card.selected { outline-color: #f6d193; outline-offset: -2px; }
-#collection-page #collection-cards > .empty-state {
+#collection-page #collection-cards > .empty-state, #collection-empty:not([hidden]) {
   display: grid; justify-items: center; gap: 8px; padding: 24px 16px;
   border: 1px solid #d3a4df69; border-radius: 16px; color: #ebd7f2; text-align: center;
   background: linear-gradient(130deg, #4a246da6, #21103cdb);
 }
+#collection-empty p { margin: 0; }
+#collection-empty .btn { min-height: 44px; }
 #collection-page #collection-cards > .empty-state::before { width: 56px; height: 56px; background: url("game-icon-collection-clear.webp") center / contain no-repeat; content: ""; }
 #collection-page #collection-sentinel { min-height: 1px; }
 @media (max-width: 350px) {
@@ -4175,7 +4187,6 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 #crystals-page .frame-item-info .hint { color: #dfcce9; font-size: 10px; line-height: 1.35; overflow-wrap: anywhere; }
 #crystals-page .frame-item > .frame-item-actions { grid-column: 2; grid-row: 2; display: flex; flex-wrap: wrap; gap: 6px; align-self: start; }
 #crystals-page .frame-item-actions .btn { min-height: 36px; padding: 0 10px; font-size: 10px; }
-#crystals-page .frame-shop-preview { padding: 14px; }
 #crystals-page .case-card { gap: 12px; }
 #crystals-page [hidden] { display: none !important; }
 
@@ -4217,7 +4228,6 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
   #crystals-page .frame-item .frame-preview { width: 62px; height: 88px; }
   .shop-dialog-card { padding: 22px 16px 16px; }
 }
-#frame-shop-preview { scroll-margin-top: calc(var(--header-h) + 18px + env(safe-area-inset-top, 0px)); }
 .shop-dialog-art--case { display: grid; place-items: center; background-image: none; }
 .shop-dialog-art .shop-dialog-case-chest { width: 110px; height: 92px; animation: none; }
 
@@ -4391,6 +4401,154 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
     color-mix(in srgb, var(--drop) 37%, transparent) 65%, transparent 100%);
 }
 
+.drop-reveal-rays, .drop-ur-impact { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .drop-overlay:is(.rarity-legendary, .rarity-mythical):is(.is-revealing, .is-revealed) .drop-reveal-rays {
+    display: block;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: min(210%, 330px, calc(100vw - 24px));
+    aspect-ratio: 1;
+    transform: translate(-50%, -50%);
+    z-index: 0;
+    pointer-events: none;
+    --ray: color-mix(in srgb, var(--drop) 87%, white);
+    --spark: color-mix(in srgb, var(--drop) 45%, white);
+  }
+  .drop-reveal-rays::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: conic-gradient(from 12deg,
+      transparent 0deg, var(--ray) 7deg 12deg, transparent 19deg,
+      transparent 48deg, var(--ray) 53deg 64deg, transparent 69deg,
+      transparent 100deg, var(--ray) 103deg 110deg, transparent 116deg,
+      transparent 141deg, var(--ray) 147deg 158deg, transparent 168deg,
+      transparent 193deg, var(--ray) 199deg 204deg, transparent 208deg,
+      transparent 229deg, var(--ray) 236deg 246deg, transparent 251deg,
+      transparent 275deg, var(--ray) 278deg 289deg, transparent 299deg,
+      transparent 324deg, var(--ray) 332deg 341deg, transparent 349deg);
+    mask-image: radial-gradient(circle closest-side, #000 28%, #000c 62%, transparent 100%);
+    animation: drop-reveal-rays 1.28s ease-out .44s both;
+  }
+  .drop-reveal-rays span {
+    position: absolute;
+    width: var(--size, 15px);
+    aspect-ratio: 1;
+    background: var(--spark);
+    clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%);
+    animation: drop-reveal-spark .84s ease-out var(--delay) both;
+  }
+  .drop-reveal-rays span:nth-child(1) { top: 22%; left: 14%; --delay: .54s; --size: 19px; }
+  .drop-reveal-rays span:nth-child(2) { top: 36%; right: 12%; --delay: .62s; --size: 20px; }
+  .drop-reveal-rays span:nth-child(3) { bottom: 26%; left: 16%; --delay: .72s; --size: 12px; }
+  .drop-reveal-rays span:nth-child(4) { bottom: 19%; right: 15%; --delay: .55s; }
+  .drop-reveal-rays span:nth-child(5) { top: 12%; right: 21%; --delay: .77s; --size: 10px; }
+  .page-hidden .drop-reveal-rays::before,
+  .page-hidden .drop-reveal-rays span { animation-play-state: paused; }
+}
+@keyframes drop-reveal-rays {
+  from { opacity: 0; transform: scale(.62) rotate(-8deg); }
+  22% { opacity: .95; }
+  56% { opacity: .62; }
+  to { opacity: 0; transform: scale(1.08) rotate(5deg); }
+}
+@keyframes drop-reveal-spark {
+  from { opacity: 0; transform: scale(.2); }
+  28% { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(.4); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .drop-overlay.rarity-mythical.is-revealing .drop-card-turn {
+    animation: drop-ur-flip 1.05s ease-in-out both;
+  }
+  .drop-overlay.rarity-mythical.is-revealing .drop-aura { animation-name: drop-ur-aura; }
+  .drop-overlay.rarity-mythical.is-revealed .drop-aura { opacity: .46; }
+  .drop-overlay.rarity-mythical:is(.is-revealing, .is-revealed) .drop-reveal-rays {
+    width: min(238%, 370px, calc(100vw - 18px));
+    --ray: #ff8195;
+    --spark: #ffd5df;
+  }
+  .drop-overlay.rarity-mythical .drop-reveal-rays::before {
+    mask-image: radial-gradient(circle closest-side, #000 48%, #000e 76%, transparent 100%);
+    animation: drop-ur-rays 1.42s ease-out .39s both;
+  }
+  .drop-overlay.rarity-mythical .drop-reveal-rays span { animation-name: drop-ur-spark; }
+  .drop-reveal-rays span:nth-child(1) { --drift-x: -24px; --drift-y: -24px; }
+  .drop-reveal-rays span:nth-child(2) { --drift-x: 22px; --drift-y: -10px; }
+  .drop-reveal-rays span:nth-child(3) { --drift-x: -20px; --drift-y: 14px; }
+  .drop-reveal-rays span:nth-child(4) { --drift-x: 22px; --drift-y: 26px; }
+  .drop-reveal-rays span:nth-child(5) { --drift-x: 15px; --drift-y: -25px; }
+
+  .drop-overlay.rarity-mythical:is(.is-revealing, .is-revealed) .drop-ur-impact {
+    display: block;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: min(174%, 280px, calc(100vw - 56px));
+    aspect-ratio: 1;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  .drop-ur-impact::before, .drop-ur-impact::after {
+    content: "";
+    position: absolute;
+  }
+  .drop-ur-impact::before {
+    inset: 0;
+    border: 2px solid #ff8099;
+    border-radius: 50%;
+    box-shadow: 0 0 16px #ff164b, inset 0 0 12px #ff164b, inset 0 0 0 7px #ff315356;
+    animation: drop-ur-wave 1.08s ease-out .42s both;
+  }
+  .drop-ur-impact::after {
+    inset: -6% 0;
+    background: radial-gradient(ellipse closest-side, #fff5f8 0%, #ffb5c4 14%, #ff345a 32%, #b9003a73 58%, transparent 100%);
+    animation: drop-ur-flash .52s ease-out .39s both;
+  }
+  .page-hidden .drop-overlay.rarity-mythical.is-revealing :is(.drop-card-turn, .drop-aura),
+  .page-hidden .drop-overlay.rarity-mythical .drop-reveal-rays::before,
+  .page-hidden .drop-ur-impact::before, .page-hidden .drop-ur-impact::after {
+    animation-play-state: paused;
+  }
+}
+@keyframes drop-ur-flip {
+  from { transform: rotateY(0deg); }
+  24% { transform: translateY(4px) scale(.94) rotateY(-17deg) rotateZ(-4deg); }
+  41% { transform: translateY(-4px) scale(1.03) rotateY(90deg); }
+  68% { transform: translateY(-7px) scale(1.07) rotateY(193deg) rotateZ(3deg); }
+  to { transform: rotateY(180deg); }
+}
+@keyframes drop-ur-aura {
+  from { opacity: 1; transform: scale(1); }
+  24% { opacity: .6; transform: scale(.7); }
+  45% { opacity: .9; transform: scale(1.14); }
+  to { opacity: .46; transform: scale(1); }
+}
+@keyframes drop-ur-rays {
+  from { opacity: 0; transform: scale(.47) rotate(-14deg); }
+  23% { opacity: 1; transform: scale(.93) rotate(-4deg); }
+  58% { opacity: .88; transform: scale(1) rotate(2deg); }
+  to { opacity: 0; transform: scale(1.03) rotate(7deg); }
+}
+@keyframes drop-ur-wave {
+  from { opacity: .95; transform: scale(.24); }
+  40% { opacity: .5; }
+  to { opacity: 0; transform: scale(1.13); }
+}
+@keyframes drop-ur-flash {
+  from { opacity: 0; transform: scale(.04, .56); }
+  20% { opacity: .88; transform: scale(.32, 1); }
+  to { opacity: 0; transform: scale(.65, 1.12); }
+}
+@keyframes drop-ur-spark {
+  from { opacity: 0; transform: translate(0, 0) scale(.2); }
+  24% { opacity: 1; }
+  to { opacity: 0; transform: translate(var(--drift-x), var(--drift-y)) scale(.45); }
+}
+
 /* Компактная сцена призыва в оформлении лунного сада. */
 .drop-content {
   isolation: isolate;
@@ -4503,7 +4661,7 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 #crystals-page .frame-item img.frame-preview {
   border: 0; background: #161222; object-fit: contain; height: auto; aspect-ratio: 2 / 3;
 }
-.frame-shop-visual { position: relative; width: min(100%, 240px); overflow: hidden; border-radius: 12px; }
+.frame-shop-visual { position: relative; justify-self: center; width: min(100%, 240px, 33dvh); overflow: hidden; border-radius: 12px; }
 .frame-shop-visual[hidden] { display: none; }
 .frame-shop-visual #frame-shop-image { display: block; width: 100%; height: auto; }
 .frame-live-fx { position: absolute; inset: 0; z-index: 1; border-radius: inherit; overflow: hidden; pointer-events: none; --fx-color: #75e8ff; }
@@ -4536,8 +4694,8 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 .sheet-card .frame-live-fx::before, .sheet-card .frame-live-fx::after,
 .card:hover .frame-live-fx::before, .card:hover .frame-live-fx::after,
 .card:focus-visible .frame-live-fx::before, .card:focus-visible .frame-live-fx::after,
-#frames-pane:not([hidden]) .frame-shop-visual .frame-live-fx::before,
-#frames-pane:not([hidden]) .frame-shop-visual .frame-live-fx::after { animation-play-state: running; }
+.frame-shop-preview[open] .frame-live-fx::before,
+.frame-shop-preview[open] .frame-live-fx::after { animation-play-state: running; }
 .page-hidden .frame-live-fx::before, .page-hidden .frame-live-fx::after { animation-play-state: paused !important; }
 @keyframes frame-edge-pulse { from { opacity: .3; } to { opacity: 1; } }
 
@@ -4617,7 +4775,7 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 .frame-live-fx[data-theme="ocean"] .frame-fx-corner > img { animation-name: frame-ornament-wave; animation-duration: 4s; }
 .sheet-card .frame-fx-corner > img, .card:hover .frame-fx-corner > img,
 .card:focus-visible .frame-fx-corner > img, .sheet:not([hidden]) .frame-picker-preview .frame-fx-corner > img,
-#frames-pane:not([hidden]) .frame-shop-visual .frame-fx-corner > img,
+.frame-shop-preview[open] .frame-fx-corner > img,
 .frame-roulette-overlay:not([hidden]) .frame-fx-corner > img { animation-play-state: running; }
 .page-hidden .frame-fx-corner > img { animation-play-state: paused !important; }
 .frame-roulette-award { position: relative; width: 112px; margin-inline: auto; border-radius: 9px; }

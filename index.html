@@ -118,9 +118,9 @@
     #style-loading { position: fixed; inset: 0; z-index: 10000; background: #140726; }
     #czl { width: 100%; height: 100%; min-height: 0; max-height: none; border: 0; border-radius: 0; box-sizing: border-box; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
     #czl .czl__land { max-height: 28%; }
-    #czl-retry { min-height: 44px; padding: 10px 20px; border-radius: 14px; color: var(--text); background: var(--glass); border: 1px solid var(--glass-line); font: 700 15px var(--font-sans); cursor: pointer; }
-    #czl-retry:focus-visible { outline: 2px solid var(--lilac); outline-offset: 2px; }
-    #czl-retry[hidden] { display: none; }
+    .czl__action { display: inline-grid; place-items: center; min-height: 44px; padding: 10px 20px; border-radius: 14px; color: var(--text); background: var(--glass); border: 1px solid var(--glass-line); font: 700 15px var(--font-sans); text-decoration: none; cursor: pointer; }
+    .czl__action:focus-visible { outline: 2px solid var(--lilac); outline-offset: 2px; }
+    .czl__action[hidden] { display: none; }
     #czl.is-error *, #czl.is-error *::after { animation-play-state: paused; }
     @media (max-height: 420px) { #czl { gap: 8px; } #czl .czl__core { width: 190px; height: 190px; } #czl .czl__name { font-size: 32px; } }
   </style>
@@ -227,7 +227,8 @@
     <h1 class="czl__name">Chizu</h1>
     <p class="czl__status" id="czl-status" aria-live="polite">Зажигаем фонари…</p>
     <p class="czl__pct" id="czl-pct">0%</p>
-    <button id="czl-retry" type="button" hidden>Попробовать снова</button>
+    <button id="czl-retry" class="czl__action" type="button" hidden>Попробовать снова</button>
+    <a id="czl-open-bot" class="czl__action" href="https://t.me/chizucard_bot" hidden>Открыть @chizucard_bot</a>
   </div>
 </div>
 
@@ -279,7 +280,7 @@
     root.classList.add('is-done');
     reveal();
   }
-  function fail(message) {
+  function fail(message, openBot) {
     if (disposed) return;
     failed = true;
     stop();
@@ -289,7 +290,8 @@
     root.removeAttribute('aria-valuenow');
     status.textContent = message;
     pct.hidden = true;
-    retry.hidden = false;
+    retry.hidden = Boolean(openBot);
+    document.getElementById('czl-open-bot').hidden = !openBot;
   }
   window.ChizuLoader = { set: set, finish: finish, fail: fail, stylesReady: function () { if (!ready) set(0.3); reveal(); } };
 
@@ -437,6 +439,10 @@
         <button type="button" data-collection-mode="duplicates" aria-pressed="false">Дубликаты</button>
       </div>
       <div id="collection-catalog">
+        <div id="collection-empty" class="empty-state" hidden>
+          <p>Коллекция пока пуста.</p>
+          <button id="collection-first-card" class="btn btn-primary" type="button">Открыть первую карту</button>
+        </div>
         <section id="collection-received" hidden>
           <div class="collection-list-heading">
             <h2 class="section-label">Только что получены</h2>
@@ -444,38 +450,40 @@
           </div>
           <div id="collection-received-cards" class="card-grid"></div>
         </section>
-        <section class="collection-tools" aria-label="Поиск и фильтры коллекции">
-          <div class="search-row collection-search-row">
-            <svg class="collection-search-icon" aria-hidden="true"><use href="#icon-search"></use></svg>
-            <input id="collection-search" type="search" maxlength="100" placeholder="Имя или серия" aria-label="Поиск по имени или серии">
-          </div>
-          <div class="chip-row" id="collection-quick-chips" aria-label="Быстрый фильтр"></div>
-          <details id="collection-filters">
-            <summary id="collection-filter-summary">Фильтры и сортировка</summary>
-            <div class="collection-filter-group">
-              <span class="collection-filter-label">Редкость</span>
-              <div class="chip-row" id="rarity-chips" aria-label="Фильтр редкости"></div>
+        <div id="collection-browse">
+          <section class="collection-tools" aria-label="Поиск и фильтры коллекции">
+            <div class="search-row collection-search-row">
+              <svg class="collection-search-icon" aria-hidden="true"><use href="#icon-search"></use></svg>
+              <input id="collection-search" type="search" maxlength="100" placeholder="Имя или серия" aria-label="Поиск по имени или серии">
             </div>
-            <div class="collection-filter-group">
-              <span class="collection-filter-label">Сортировка</span>
-              <div class="chip-row" id="sort-chips" aria-label="Сортировка карт"></div>
+            <div class="chip-row" id="collection-quick-chips" aria-label="Быстрый фильтр"></div>
+            <details id="collection-filters">
+              <summary id="collection-filter-summary">Фильтры и сортировка</summary>
+              <div class="collection-filter-group">
+                <span class="collection-filter-label">Редкость</span>
+                <div class="chip-row" id="rarity-chips" aria-label="Фильтр редкости"></div>
+              </div>
+              <div class="collection-filter-group">
+                <span class="collection-filter-label">Сортировка</span>
+                <div class="chip-row" id="sort-chips" aria-label="Сортировка карт"></div>
+              </div>
+            </details>
+            <button id="collection-reset" class="btn btn-secondary" type="button" hidden>Сбросить поиск и фильтры</button>
+          </section>
+          <div class="collection-list-heading">
+            <h2 class="section-label">Ваши карты</h2>
+            <div class="collection-meta" aria-live="polite">
+              <span id="collection-count"></span>
+              <strong id="collection-page-label"></strong>
             </div>
-          </details>
-          <button id="collection-reset" class="btn btn-secondary" type="button" hidden>Сбросить поиск и фильтры</button>
-        </section>
-        <div class="collection-list-heading">
-          <h2 class="section-label">Ваши карты</h2>
-          <div class="collection-meta" aria-live="polite">
-            <span id="collection-count"></span>
-            <strong id="collection-page-label"></strong>
           </div>
+          <button id="collection-select" class="btn btn-secondary collection-select" type="button">Выбрать карты</button>
+          <button id="collection-layout" class="btn btn-secondary collection-select" type="button" aria-pressed="false">Компактный список</button>
+          <p class="collection-help">★ — избранное. Замок — карта в обмене, передаче или на аукционе.</p>
+          <div id="collection-cards" class="card-grid"></div>
+          <div id="collection-sentinel"></div>
+          <button id="collection-more" class="btn btn-secondary btn-block" type="button" hidden>Показать ещё карты</button>
         </div>
-        <button id="collection-select" class="btn btn-secondary collection-select" type="button">Выбрать карты</button>
-        <button id="collection-layout" class="btn btn-secondary collection-select" type="button" aria-pressed="false">Компактный список</button>
-        <p class="collection-help">★ — избранное. Замок — карта в обмене, передаче или на аукционе.</p>
-        <div id="collection-cards" class="card-grid"></div>
-        <div id="collection-sentinel"></div>
-        <button id="collection-more" class="btn btn-secondary btn-block" type="button" hidden>Показать ещё карты</button>
       </div>
       <section id="collection-albums" hidden>
         <div class="collection-list-heading">
@@ -541,7 +549,7 @@
       </div>
       <div id="mine-pane" hidden>
         <h2 class="section-label market-section-title">Мои лоты</h2>
-        <button id="create-lot" class="btn btn-primary btn-block" type="button">Создать лот</button>
+        <button id="create-lot" class="btn btn-primary btn-block" type="button">Выбрать карту для аукциона</button>
         <div id="my-market-listings"></div>
       </div>
       <section id="trade-pane" hidden aria-label="Обмен картами">
@@ -632,7 +640,7 @@
             <div class="ticket-cost-row">
               <span>Итого</span>
               <strong><span class="icon-sm chip-crystal currency-icon" aria-hidden="true"></span>
-                <span id="ticket-cost">10</span></strong>
+                <span id="ticket-cost">10 кристаллов</span></strong>
             </div>
             <div class="action-with-info">
               <button id="buy-tickets-button" class="btn btn-primary" type="button"
@@ -678,27 +686,9 @@
         <div class="collection-meta">
           <span id="frame-shop-balance">0 пыли</span>
         </div>
-        <div id="frame-shop" class="frame-shop"></div>
-        <section id="frame-shop-preview" class="frame-shop-preview" aria-label="Примерка рамки">
-          <strong>Примерка на вашей карте</strong>
-          <label for="frame-shop-card">Карта</label>
-          <select id="frame-shop-card"></select>
-          <div class="frame-shop-pages">
-            <button id="frame-shop-prev" class="btn btn-secondary" type="button">←</button>
-            <span id="frame-shop-page" class="hint"></span>
-            <button id="frame-shop-next" class="btn btn-secondary" type="button">→</button>
-          </div>
-          <p id="frame-shop-preview-status" class="hint" role="status"></p>
-          <div id="frame-shop-visual" class="frame-shop-visual" hidden>
-            <img id="frame-shop-image" alt="Предпросмотр рамки на выбранной карте" hidden>
-          </div>
-          <button id="frame-shop-manage" class="btn btn-primary btn-block" type="button" disabled>
-            Управлять рамками выбранной карты
-          </button>
-        </section>
         <div class="action-with-info">
-          <button id="frame-shop-to-collection" class="btn btn-secondary btn-block" type="button">
-            Выбрать карту в коллекции
+          <button id="frame-shop-try" class="btn btn-secondary btn-block" type="button" disabled>
+            Примерка на вашей карте
           </button>
           <button id="frame-info" class="info-trigger" type="button"
             aria-label="Информация о рамках"
@@ -707,6 +697,8 @@
             <svg class="icon-sm" aria-hidden="true"><use href="#icon-info"></use></svg>
           </button>
         </div>
+        <div id="frame-shop-status" role="status"></div>
+        <div id="frame-shop" class="frame-shop"></div>
       </div>
       <div id="cases-pane" hidden>
         <article class="case-card">
@@ -719,7 +711,7 @@
           </div>
           <div class="action-with-info">
             <button id="case-open-button" class="btn btn-primary btn-block" type="button" disabled>
-              Открыть кейс · <span id="case-open-price">100</span>
+              Открыть кейс · <span id="case-open-price">100 кристаллов</span>
               <span class="case-open-crystal chip-crystal currency-icon" aria-hidden="true"></span>
             </button>
             <button id="case-info" class="info-trigger" type="button"
@@ -776,7 +768,7 @@
       <div id="account-own-view">
       <h2 class="section-label profile-section-title">Ваша коллекция</h2>
       <div class="stats">
-        <div class="stat"><strong id="account-card-count">0</strong><span>карт</span></div>
+        <div class="stat"><strong id="account-card-count">—</strong><span id="account-card-noun">карт</span></div>
         <div class="stat"><strong id="rare-count">—</strong><span>редких+</span></div>
         <div class="stat"><strong id="legendary-count">—</strong><span>легендарных</span></div>
         <div class="stat"><strong id="trade-count">—</strong><span>обменов</span></div>
@@ -944,6 +936,34 @@
     </button>
   </nav>
 
+  <dialog id="frame-shop-preview" class="frame-shop-preview" aria-labelledby="frame-shop-preview-title">
+    <div class="sheet-head">
+      <h3 id="frame-shop-preview-title">Примерка рамок</h3>
+      <button id="frame-shop-preview-close" class="icon-btn" type="button" aria-label="Закрыть" autofocus>
+        <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+      </button>
+    </div>
+    <label for="frame-shop-frame">Рамка</label>
+    <select id="frame-shop-frame"></select>
+    <label for="frame-shop-card">Карта</label>
+    <select id="frame-shop-card"></select>
+    <div id="frame-shop-pages" class="frame-shop-pages" hidden>
+      <button id="frame-shop-prev" class="btn btn-secondary" type="button" aria-label="Предыдущая страница карт">←</button>
+      <span id="frame-shop-page" class="hint"></span>
+      <button id="frame-shop-next" class="btn btn-secondary" type="button" aria-label="Следующая страница карт">→</button>
+    </div>
+    <p id="frame-shop-preview-status" class="hint" role="status"></p>
+    <div id="frame-shop-visual" class="frame-shop-visual" hidden>
+      <img id="frame-shop-image" alt="Предпросмотр рамки на выбранной карте" hidden>
+    </div>
+    <button id="frame-shop-manage" class="btn btn-primary btn-block" type="button" disabled>
+      Управлять рамками выбранной карты
+    </button>
+    <button id="frame-shop-to-collection" class="btn btn-secondary btn-block" type="button" hidden>
+      Открыть первую карту
+    </button>
+  </dialog>
+
   <div id="sheet-backdrop" class="sheet-backdrop" hidden></div>
   <aside id="sheet" class="sheet" hidden>
     <div class="sheet-handle" aria-hidden="true"></div>
@@ -986,6 +1006,10 @@
         </div>
         <span class="drop-beam"></span>
         <div class="drop-aura" aria-hidden="true"></div>
+        <div class="drop-reveal-rays">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <div class="drop-ur-impact"></div>
         <div class="drop-card-turn">
           <div class="drop-card-back"><img id="drop-card-cover" class="drop-card-emblem" data-static-src="summon-card-back.webp" data-static-fallback="summon-card-back.png" alt="" aria-hidden="true" decoding="async"></div>
           <div id="drop-revealed-card" class="drop-revealed-card"></div>
