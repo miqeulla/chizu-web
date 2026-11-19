@@ -64,18 +64,18 @@
     collectionPage: 1, collectionPages: 1, collectionQuery: "",
     collectionRarity: "", collectionSort: "new", collectionFilter: "", profile: null,
     collectionMode: "cards", collectionVersion: 0, receivedCards: [],
-    marketItems: [], activePage: "home", transferLink: "",
-    homeCards: [], collectionTotal: 0, ownedCardCount: 0,
+    marketItems: [], activePage: "home",
+    collectionTotal: 0, ownedCardCount: 0,
     favorites: [], favoriteLimit: 3, shopFrames: [], framePacks: [], packOpening: false,
     frameShopCards: [], frameShopPage: 1, frameShopPages: 1,
     frameShopCardId: null, frameShopFrameId: null, framePreviewVersion: 0,
     frameShopPinnedCard: null, frameShopCardsVersion: 0,
     tradeSubmitting: false, transferSubmitting: false, listingSubmitting: false,
     caseCatalog: null, caseOpening: false,
-    economyBusy: false, craftVersion: 0, craftAfter: null,
+    economyBusy: false,
     referralLink: "",
     collectionItems: [], collectionLoading: false, selectMode: false,
-    marketTab: "all", shopTab: "rolls", lastDropCard: null,
+    marketTab: "all", shopTab: "frames", lastDropCard: null,
     dropStartedAt: 0, dropStageTimer: 0, dropTimer: 0, dropReadyAt: 0, dropBusy: false,
     mainClick: null, overlayOpen: false,
     publicPlayer: null, publicInventoryPage: 0,
@@ -115,7 +115,7 @@
     try { saved = JSON.parse(playerPreference("collection-settings") || "null"); }
     catch (_error) { return; }
     if (!saved) return;
-    if (["cards", "albums", "duplicates"].includes(saved.mode)) state.collectionMode = saved.mode;
+    if (["cards", "albums", "duplicates", "frames"].includes(saved.mode)) state.collectionMode = saved.mode;
     if (typeof saved.query === "string") {
       state.collectionQuery = saved.query.slice(0, 100);
       el("collection-search").value = state.collectionQuery;
@@ -202,7 +202,7 @@
     } catch (_error) { /* missing Telegram runtime */ }
   }
 
-  const recoverablePurchase = /^(?:\/api\/(?:drop(?:\/all|\/extra)?|rolls\/(?:buy|dust)|cases\/(?:open|redeem)|frames\/(?:buy|packs\/(?:buy|open))|cards\/\d+\/upgrade|craft))$/;
+  const recoverablePurchase = /^(?:\/api\/(?:drop(?:\/all|\/extra)?|rolls\/(?:buy|dust)|cases\/open|frames\/(?:buy|packs\/(?:buy|open))|cards\/\d+\/(?:upgrade|downgrade)|craft))$/;
   const newRequestId = () => crypto.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`;
   let pendingOperation = null;
   let economyRequestBusy = false;
@@ -335,6 +335,13 @@
         openInfoPopup("Кейс открыт", caseRewardSummary(result));
       } else if (operation.path === "/api/frames/packs/open") {
         openInfoPopup("Пак открыт", `Получена рамка «${result.frame.title}».`);
+      } else if (operation.path === "/api/craft" && cards.length) {
+        closeSheet();
+        startDropOpening({ crafted: true });
+        await playDropReveal(cards);
+      } else if (operation.path.endsWith("/downgrade") && result.card) {
+        applyCardUpdate(result.card);
+        showNotice(`Улучшение снято. Возвращено ${result.refund} пыли.`);
       } else {
         showNotice("Операция подтверждена. Баланс обновлён.");
       }
@@ -485,15 +492,19 @@
       page.hidden = page.id !== `${name}-page`;
     });
     document.querySelectorAll(".main-nav button").forEach((button) => {
-      button.classList.toggle("active", button.dataset.page === name);
+      const active = button.dataset.page === name;
+      button.classList.toggle("active", active);
+      if (active) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
     });
-    if (name === "collection" && !state.collectionVisited) refreshCollection();
+    if (name === "collection" && (!state.collectionVisited ||
+        (previous !== name && state.collectionMode === "frames"))) refreshCollection();
     renderCollectionSelection();
     if (name === "account") loadAccountPage();
     if (name === "crystals" && state.shopTab === "frames" && loadShop) {
       loadFrameShop().catch(showError);
     }
-    if (name === "crystals" && state.shopTab === "cases") {
+    if (name === "crystals" && state.shopTab === "cases" && loadShop) {
       loadCaseCatalog().catch(showError);
     }
     if (name === "trade") {
@@ -527,6 +538,7 @@
   function setCrystals(balance) {
     state.crystals = balance;
     el("crystals-balance").textContent = balance;
+    el("crystal-shop-balance").textContent = formatCrystalCount(balance);
     updateFrameShopBalance();
     updateRollShopButtons();
     updateCaseButton();
@@ -593,8 +605,11 @@
     } else if (currency === "crystals") {
       const note = document.createElement("p");
       note.className = "hint";
-      note.textContent = `${missing ? `Не хватает ${missing} кристаллов. ` : ""}Покупка кристаллов пока недоступна.`;
-      body.append(note);
+      if (missing) {
+        note.textContent = `Не хватает ${formatCrystalCount(missing)}.`;
+        body.append(note);
+      }
+      body.append(displayButton("Пополнить кристаллы", () => shop("gems"), false));
       if (!onBack) body.append(displayButton("Билеты", () => shop("rolls")),
         displayButton("Паки рамок", () => shop("frames")), displayButton("Кейсы", () => shop("cases")));
     } else {
@@ -620,6 +635,7 @@
       dust: "Распыление карт", dust_ticket_purchased: "Билет за пыль",
       rolls_purchased: "Билеты за кристаллы", extra_roll_used: "Призыв за билет",
       card_crafted: "Создание карты", card_upgraded: "Улучшение карты",
+      card_upgrade_removed: "Возврат за снятие улучшения", case_shards_converted: "Обмен осколков на пыль",
       case_opened: "Открытие кейса", case_reward: "Награда из кейса", case_duplicate: "Дубликат из кейса",
       frame_purchased: "Покупка рамки", frame_pack_purchased: "Покупка пака рамок",
       frame_pack_opened: "Открытие пака рамок", frame_pack_duplicate: "Дубликат рамки",
@@ -869,10 +885,10 @@
       lock.append(icon("lock"));
       marks.append(lock);
     }
-    if (state.favorites.some((favorite) => favorite.id === card.id)) {
+    if (favorite) {
       const star = document.createElement("span");
-      star.className = "mark-pill";
-      star.append(icon("star"));
+      star.className = "mark-pill mark-favorite";
+      star.append(icon("heart"));
       marks.append(star);
     }
     if (selected) {
@@ -978,8 +994,8 @@
     let tiltY = 0;
 
     function setTilt(x, y) {
-      tiltX = Math.max(-32, Math.min(32, x));
-      tiltY = Math.max(-42, Math.min(42, y));
+      tiltX = Math.max(-24, Math.min(24, x));
+      tiltY = Math.max(-30, Math.min(30, y));
       card.style.setProperty("--card-tilt-x", `${tiltX}deg`);
       card.style.setProperty("--card-tilt-y", `${tiltY}deg`);
     }
@@ -1062,28 +1078,11 @@
     }
     const timer = el("drop-timer");
     const ring = el("drop-ring");
-    timer.textContent = stock.next_in == null ? "✦ Запас полон" : `Следующее открытие через ${formatDuration(seconds)}`;
+    timer.textContent = stock.next_in == null ? "Запас полон" : `Следующее через ${formatDuration(seconds)}`;
     const cooldown = state.profile.drop_cooldown_duration || DROP_COOLDOWN_SEC;
     ring.style.setProperty("--progress", String(Math.max(0, Math.min(1, 1 - seconds / cooldown))));
     updateDropButton();
     if (seconds > 0) state.dropTimer = window.setTimeout(updateDropTimer, 1000);
-  }
-
-  function renderHome() {
-    const container = el("home-showcase");
-    container.replaceChildren();
-    if (!state.homeCards.length) {
-      const empty = document.createElement("div");
-      empty.className = "empty-state";
-      empty.textContent = "Откройте первую карту";
-      container.append(empty);
-      return;
-    }
-    state.homeCards.forEach((card) => {
-      container.append(cardButton(card, false, false, () => {
-        openCardSheet(card, { source: state.homeCards });
-      }, ""));
-    });
   }
 
   function updateProfileTier(profile) {
@@ -1097,11 +1096,21 @@
 
   function renderStarPacks() {
     const container = el("crystal-star-packs");
-    container.replaceChildren(...(state.profile?.crystal_star_packs || []).map(pack => {
+    const packs = state.profile?.crystal_star_packs || [];
+    container.replaceChildren(...packs.map((pack, index) => {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "btn btn-secondary";
-      button.textContent = `${pack.crystals} кристаллов · ${pack.stars} ⭐`;
+      button.className = "crystal-pack";
+      button.dataset.tier = index + 1;
+      const art = document.createElement("span");
+      art.className = "crystal-pack-art";
+      art.setAttribute("aria-hidden", "true");
+      const quantity = document.createElement("strong");
+      quantity.textContent = formatCrystalCount(pack.crystals);
+      const price = document.createElement("span");
+      price.className = "crystal-pack-price";
+      price.textContent = `${pack.stars} ★ Stars`;
+      button.append(art, quantity, price);
       button.disabled = starPaymentBusy || !tg?.openInvoice;
       button.addEventListener("click", () => buyStarPack(pack.id));
       return button;
@@ -1150,6 +1159,7 @@
     }
     state.profile = profile;
     renderStarPacks();
+    renderCraftRarities();
     if (profile.profile_background) await loadBackgrounds();
     syncAppBackground();
     return profile;
@@ -1167,7 +1177,6 @@
     setCrystals(profile.crystals);
     setRolls(profile.rolls);
     renderEconomyStatus();
-    setProfileAvatar("home-avatar", profile);
     updateProfileTier(profile);
     state.ownedCardCount = profile.card_count;
     el("card-count").textContent = state.ownedCardCount;
@@ -1178,18 +1187,12 @@
       ? `Ежедневная награда: ${profile.vip_daily_reward} пыли${
         profile.vip.active ? " · VIP-бонус" : ""}`
       : `Следующая награда: ${localDateTime(profile.next_daily_reset)}`;
-    updateDropTimer();
-    const inventory = await api("/api/inventory?page=1");
-    state.ownedCardCount = inventory.total;
-    el("card-count").textContent = state.ownedCardCount;
     const showingEmptyCollection = !el("collection-empty").hidden;
     if (state.collectionVisited && state.collectionMode === "cards" &&
-        showingEmptyCollection !== (inventory.total === 0)) {
+        showingEmptyCollection !== (profile.card_count === 0)) {
       state.collectionVisited = false;
       if (state.activePage === "collection") refreshCollection();
     }
-    state.homeCards = inventory.items.slice(0, 10);
-    renderHome();
     updateDropTimer();
   }
 
@@ -1209,9 +1212,9 @@
   }
 
   let dropSession = null;
-  function startDropOpening(gift = false) {
+  function startDropOpening({ gift = false, crafted = false } = {}) {
     const overlay = el("drop-overlay");
-    const session = { skipped: false, cancelled: false, wake: null, gift };
+    const session = { skipped: false, cancelled: false, wake: null, gift, crafted };
     dropSession = session;
     overlay.hidden = false;
     overlay.className = "drop-overlay is-opening";
@@ -1221,7 +1224,10 @@
     el("drop-followup").hidden = true;
     el("drop-results").hidden = true;
     el("drop-results").replaceChildren();
-    el("drop-title").textContent = gift ? "Распаковываем подарок…" : "Призываем карту…";
+    el("drop-sequence").hidden = true;
+    el("drop-progress").hidden = true;
+    el("drop-to-results").hidden = true;
+    el("drop-title").textContent = gift ? "Распаковываем подарок…" : crafted ? "Создаём карту…" : "Призываем карту…";
     el("drop-rarity").textContent = "";
     el("drop-description").textContent = "Соединяемся со звёздами…";
     el("drop-revealed-card").replaceChildren();
@@ -1243,6 +1249,7 @@
     clearTimeout(state.dropStageTimer);
     el("drop-overlay").hidden = true;
     el("drop-overlay").className = "drop-overlay";
+    el("drop-sequence").replaceChildren();
     syncBackButton();
   }
   function dropWait(session, milliseconds) {
@@ -1273,7 +1280,7 @@
     });
   }
 
-  async function revealDrop(card, index, total, session) {
+  async function revealDrop(card, session) {
     const overlay = el("drop-overlay");
     const cardElement = cardButton(card, false, false, null, "");
     cardElement.setAttribute("aria-disabled", "true");
@@ -1286,7 +1293,7 @@
       showNotice("Карта сохранена. Изображение ещё загружается — его можно посмотреть в коллекции.");
       return;
     }
-    el("drop-title").textContent = `Карта ${index + 1} из ${total}`;
+    el("drop-title").textContent = session.crafted ? "Карта создана" : "Призыв";
     el("drop-rarity").textContent = card.rarity_title;
     el("drop-description").textContent = "Свет раскрывает новую встречу…";
     await dropWait(session, 900);
@@ -1305,10 +1312,53 @@
     await dropWait(session, 850);
   }
 
+  async function revealDropSequence(cards, session) {
+    if (session.skipped || session.cancelled) return;
+    const grid = el("drop-sequence");
+    const progress = el("drop-progress");
+    const tiles = cards.map(() => {
+      const tile = document.createElement("div");
+      tile.className = "drop-sequence-tile";
+      const turn = document.createElement("div");
+      turn.className = "drop-sequence-turn";
+      tile.append(turn);
+      return tile;
+    });
+    grid.replaceChildren(...tiles);
+    grid.dataset.count = cards.length;
+    grid.hidden = false;
+    progress.textContent = `0 / ${cards.length}`;
+    progress.hidden = false;
+    el("drop-overlay").className = "drop-overlay is-sequence";
+    el("drop-title").textContent = "Призыв";
+    el("drop-description").textContent = "";
+    el("drop-to-results").hidden = false;
+    await dropWait(session, 550);
+
+    for (const [index, card] of cards.entries()) {
+      if (session.skipped || session.cancelled || document.hidden) break;
+      const face = cardButton(card, false, false, null, "");
+      face.classList.add("drop-sequence-face");
+      face.tabIndex = -1;
+      const tile = tiles[index];
+      tile.firstElementChild.append(face);
+      const ready = await prepareDropImage(card, face.querySelector("img"), session);
+      if (!ready || session.skipped || session.cancelled || document.hidden) break;
+      tile.classList.add("is-flipped", rarityClass(card.rarity));
+      progress.textContent = `${index + 1} / ${cards.length} · ${card.name} · ${card.rarity_title}`;
+      haptic(card.rarity === "mythical" || card.rarity === "legendary" ? "heavy" : "medium");
+      await dropWait(session, 780);
+    }
+  }
+
   function showDropResults(cards) {
     state.lastDropCard = cards.length === 1 ? cards[0] : null;
     const overlay = el("drop-overlay");
     overlay.className = "drop-overlay is-results";
+    el("drop-sequence").hidden = true;
+    el("drop-sequence").replaceChildren();
+    el("drop-progress").hidden = true;
+    el("drop-to-results").hidden = true;
     const results = el("drop-results");
     results.replaceChildren(...cards.map((card) => {
       const item = document.createElement("div");
@@ -1320,13 +1370,14 @@
       return item;
     }));
     results.hidden = false;
-    el("drop-title").textContent = cards.length === 1 ? "Карта получена!" : `Получено карт: ${cards.length}`;
+    el("drop-title").textContent = dropSession?.crafted ? "Карта создана!"
+      : cards.length === 1 ? "Карта получена!" : `Получено карт: ${cards.length}`;
     el("drop-rarity").textContent = "";
-    el("drop-description").textContent = "Карты сохранены в коллекции.";
+    el("drop-description").textContent = cards.length === 1 ? "Карта сохранена в коллекции." : "Карты сохранены в коллекции.";
     el("drop-skip").hidden = true;
     el("drop-close").hidden = false;
     el("drop-followup").hidden = false;
-    el("drop-dust").hidden = cards.length !== 1 || Boolean(dropSession?.gift || dropSession?.first);
+    el("drop-dust").hidden = cards.length !== 1 || Boolean(dropSession?.gift || dropSession?.first || dropSession?.crafted);
     el("drop-to-collection").onclick = () => openDropCollection(cards, null);
     if (cards.length === 1) el("drop-dust").textContent = `Распылить за ${cards[0].dust_value} пыли`;
     el("drop-close").focus();
@@ -1345,8 +1396,23 @@
     if (card) openCardSheet(card, { source: cards });
   }
 
-  async function presentDrop(result, isFreeDrop) {
+  async function playDropReveal(cards) {
     const session = dropSession;
+    clearTimeout(state.dropStageTimer);
+    if (!session || session.cancelled) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!reduced && !document.hidden) {
+      const delay = session.crafted ? 220 : DROP_MIN_OPEN_MS;
+      await dropWait(session, Math.max(0, delay - (performance.now() - state.dropStartedAt)));
+      if (!document.hidden && !session.skipped && !session.cancelled) {
+        if (cards.length > 1) await revealDropSequence(cards, session);
+        else await revealDrop(cards[0], session);
+      }
+    }
+    if (!session.cancelled) showDropResults(cards);
+  }
+
+  async function presentDrop(result, isFreeDrop) {
     setBalance(result.balance);
     if (Number.isInteger(result.crystals)) setCrystals(result.crystals);
     if (Number.isInteger(result.rolls)) setRolls(result.rolls);
@@ -1356,23 +1422,11 @@
       state.dropReadyAt = Date.now() + (result.free_drops.next_in || 0) * 1000;
     }
     const cards = result.cards || [result.card];
-    if (state.profile) state.profile.has_summoned = true;
+    if (state.profile && !dropSession?.crafted) state.profile.has_summoned = true;
     state.collectionVisited = false;
     state.ownedCardCount += cards.length;
     el("card-count").textContent = state.ownedCardCount;
-    state.homeCards = [...cards, ...state.homeCards.filter((item) => !cards.some((newCard) => newCard.id === item.id))].slice(0, 10);
-    renderHome();
-    clearTimeout(state.dropStageTimer);
-    if (session && !session.cancelled) {
-      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      if (!reduced) {
-        await dropWait(session, Math.max(0, DROP_MIN_OPEN_MS - (performance.now() - state.dropStartedAt)));
-        for (let index = 0; index < cards.length && !session.skipped && !session.cancelled; index += 1) {
-          await revealDrop(cards[index], index, cards.length, session);
-        }
-      }
-      if (!session.cancelled) showDropResults(cards);
-    }
+    await playDropReveal(cards);
     if (isFreeDrop) updateDropTimer();
     else updateDropButton();
   }
@@ -1490,6 +1544,14 @@
       const button = cardButton(card, selected, Boolean(card.lock_reason), open, "");
       button.dataset.collectionCard = card.id;
       if (!state.compactCollection) {
+        if (card.owned_count > 1) {
+          const copies = document.createElement("span");
+          copies.className = "mark-pill card-copy-count";
+          copies.textContent = `×${card.owned_count}`;
+          button.setAttribute("aria-label", `${button.getAttribute("aria-label")}, экземпляров: ${card.owned_count}`);
+          copies.setAttribute("aria-hidden", "true");
+          button.append(copies);
+        }
         container.append(button);
         return;
       }
@@ -1586,7 +1648,6 @@
     const oneCard = cards.length === 1;
     el("selection-label").textContent = `Выбрано: ${cards.length} / 10`;
     el("dust-selected").disabled = cards.length === 0;
-    el("transfer-selected").disabled = cards.length === 0;
     el("sell-selected").disabled = !oneCard;
     const startPrice = el("auction-start-price");
     startPrice.disabled = !oneCard;
@@ -1619,6 +1680,7 @@
     el("collection-catalog").hidden = mode !== "cards";
     el("collection-albums").hidden = mode !== "albums";
     el("collection-duplicates").hidden = mode !== "duplicates";
+    el("collection-frames").hidden = mode !== "frames";
     document.querySelectorAll("[data-collection-mode]").forEach((button) => {
       const active = button.dataset.collectionMode === mode;
       button.classList.toggle("active", active);
@@ -1629,6 +1691,7 @@
     renderCollectionSelection();
     if (mode === "albums" && !loadedCollectionModes.has(mode)) return loadCollectionAlbums(albums.page).catch(showError);
     if (mode === "duplicates" && !loadedCollectionModes.has(mode)) return loadCollectionCopies(copies.page).catch(showError);
+    if (mode === "frames") return loadFrameInventory();
     if (mode === "cards") {
       updateCollectionAvailability();
       renderReceivedCards();
@@ -1681,7 +1744,10 @@
     bind("sort-chips", SORTS, "collectionSort");
     const rarity = RARITIES.find(({ key }) => key && key === state.collectionRarity)?.title;
     const sort = state.collectionSort !== "new" && SORTS.find(({ key }) => key === state.collectionSort)?.title;
-    el("collection-filter-summary").textContent = ["Фильтры и сортировка", rarity, sort].filter(Boolean).join(" · ");
+    const summary = el("collection-filter-summary");
+    const label = ["Фильтры и сортировка", rarity, sort].filter(Boolean).join(" · ");
+    summary.setAttribute("aria-label", label);
+    summary.title = label;
     updateCollectionReset();
   }
 
@@ -1803,12 +1869,11 @@
     }, false));
     if (item.craft_price) {
       body.append(displayButton(`К созданию · ${item.craft_price} пыли`, () => {
-        el("craft-query").value = item.name;
-        el("craft-rarity").value = item.craft_rarity;
         closeSheet();
         showPage("crystals", { loadShop: false });
         setShopTab("craft");
         window.scrollTo(0, 0);
+        openCraftSearch(item.craft_rarity, item.name);
       }));
     }
     openSheet(item.name, body);
@@ -2093,6 +2158,11 @@
     body.className = "card-detail-content";
     const preview = cardButton(card, false, false, null, "", previousImageUrl);
     preview.classList.add("sheet-card");
+    preview.tabIndex = -1;
+    preview.setAttribute("aria-disabled", "true");
+    const presentation = document.createElement("div");
+    presentation.className = "card-inspect-visual";
+    presentation.append(preview);
     body.classList.toggle("card-upgrade-complete", revealUpgrade);
     upgradeMask?.then((url) => {
       if (!url || !preview.isConnected || el("sheet").hidden) return;
@@ -2104,7 +2174,6 @@
       effect.addEventListener("animationend", () => effect.remove(), { once: true });
       preview.querySelector("img").after(effect);
     });
-    preview.disabled = true;
     const actions = document.createElement("div");
     actions.className = "sheet-actions";
     const otherActions = document.createElement("div");
@@ -2153,11 +2222,7 @@
         closeSheet();
         showPage("trade");
       })],
-      ["Передать", "secondary", async () => {
-        state.collectionSelected = new Map([[card.id, card]]);
-        await transferSelected();
-      }],
-      ["Подарить", "secondary", () => openGiftComposer(card)],
+      ["Передать", "secondary", () => openTransferComposer([card], () => openCardSheet(card, { source }))],
       [`Распылить за ${card.dust_value} пыли`, "danger", () => withFirstTip("dust", "Первое распыление",
         "Карта исчезнет из коллекции, а пыль поступит в кошелёк. Действие потребует подтверждения.", async () => {
         state.collectionSelected = new Map([[card.id, card]]);
@@ -2195,6 +2260,12 @@
       });
       actions.append(upgrade);
     }
+    const refund = state.profile?.economy?.upgrade_refunds?.[level - 1];
+    if (refund !== undefined) {
+      const remove = displayButton(`Снять уровень · +${refund} пыли`, () => downgradeCard(card, remove, refund, source));
+      remove.disabled = Boolean(card.lock_reason);
+      actions.append(remove);
+    }
     const manageFrame = document.createElement("button");
     manageFrame.type = "button";
     manageFrame.className = "btn btn-secondary btn-block card-frame-manage";
@@ -2203,7 +2274,7 @@
     manageFrame.addEventListener("click", () => withFirstTip("frame", "Первая примерка",
       "Здесь можно примерить свои рамки. Если передать карту с коллекционной рамкой, она уйдёт вместе с картой.",
       () => openFramePicker(card, { onBack: (updated) => openCardSheet(updated, { source }) })));
-    body.append(preview);
+    body.append(presentation);
     const items = Array.isArray(source) ? source : source?.items;
     if (items && (items.length > 1 || source.prev || source.next)) {
       const index = items.findIndex((item) => item.id === card.id);
@@ -2309,10 +2380,58 @@
     return state.shopFrames;
   }
 
+  let frameInventoryVersion = 0;
+
+  async function loadFrameInventory() {
+    const version = ++frameInventoryVersion;
+    const status = el("frame-inventory-status");
+    status.textContent = "Загружаем ваши рамки…";
+    el("frame-inventory-items").replaceChildren();
+    el("frame-inventory-count").textContent = "";
+    el("frame-inventory-available").disabled = true;
+    try {
+      const frames = await loadFramesCatalog();
+      if (version !== frameInventoryVersion) return;
+      renderFrameInventory(frames);
+    } catch (error) {
+      if (version !== frameInventoryVersion) return;
+      status.replaceChildren(displayButton("Повторить загрузку", loadFrameInventory));
+      showError(error);
+    }
+  }
+
+  function renderFrameInventory(frames = state.shopFrames) {
+    const owned = frames.filter((frame) => frame.owned);
+    const available = el("frame-inventory-available");
+    available.disabled = !owned.length;
+    const visible = available.checked ? owned.filter((frame) => frame.available) : owned;
+    el("frame-inventory-count").textContent = `Всего: ${owned.reduce((sum, frame) => sum + frame.quantity, 0)}`;
+    const status = el("frame-inventory-status");
+    status.textContent = visible.length ? "" : owned.length ? "Все рамки надеты." : "В инвентаре пока нет рамок.";
+    if (!owned.length) status.append(" ", displayButton("В магазин рамок", () => {
+      showPage("crystals", { loadShop: false });
+      setShopTab("frames");
+      window.scrollTo(0, 0);
+    }));
+    el("frame-inventory-items").replaceChildren(...visible.map((frame) =>
+      rewardTile(frame.title, frameAssetUrl(frame.preview_url),
+        `${frame.rarity_title} · ×${frame.quantity}`, frameStockLabel(frame), () => {
+          const body = document.createElement("div");
+          body.className = "reward-detail";
+          const stock = document.createElement("p");
+          stock.className = "hint";
+          stock.textContent = `${frame.rarity_title} · Всего: ${frame.quantity} · ${frameStockLabel(frame)}`;
+          body.append(rewardVisual(frameAssetUrl(frame.live_preview_url || frame.preview_url), frame), stock,
+            displayButton("Примерить на карте", () => previewFrameOnCard(frame.id, owned, "Мои рамки")));
+          openSheet(frame.title, body);
+        })));
+  }
+
+  el("frame-inventory-available").addEventListener("change", () => renderFrameInventory());
+
   function applyCardUpdate(updated) {
     const replace = (items) => items.map((item) => item.id === updated.id ? updated : item);
     state.collectionItems = replace(state.collectionItems);
-    state.homeCards = replace(state.homeCards);
     state.receivedCards = replace(state.receivedCards);
     state.favorites = replace(state.favorites);
     state.inventory = replace(state.inventory);
@@ -2597,11 +2716,17 @@
     time.className = "listing-time";
     if (active) time.dataset.auctionExpiry = String(listing.expires_at);
     else time.textContent = { sold: "Завершён", expired: "Истёк", cancelled: "Отменён" }[listing.status];
-    const current = document.createElement("div");
-    current.className = "listing-meta";
-    current.textContent = listing.current_bid === null
-      ? `Старт · ${listing.starting_price} пыли`
-      : `Ставка · ${listing.current_bid} пыли`;
+    const offer = document.createElement("div");
+    offer.className = "listing-offer";
+    const current = document.createElement("strong");
+    current.className = "listing-price";
+    const price = listing.current_bid ?? listing.starting_price;
+    const dust = document.createElement("span");
+    dust.className = "currency-icon chip-dust";
+    dust.setAttribute("aria-hidden", "true");
+    current.append(dust, price.toLocaleString("ru-RU"));
+    current.setAttribute("aria-label", `${listing.current_bid === null ? "Старт" : "Текущая ставка"}: ${price} пыли`);
+    offer.append(current);
     const bids = document.createElement("div");
     bids.className = "listing-meta";
     bids.textContent = `Ставок: ${listing.bid_count}`;
@@ -2611,7 +2736,8 @@
       listing.card && hasCustomFrame(listing.card) ? `Рамка: ${listing.card.style_title}` : ""].filter(Boolean).join(" · ");
     body.append(title);
     if (listing.card) body.append(rarity, printNumberLabel(listing.card));
-    body.append(time, current, bids, details);
+    body.append(time, bids);
+    if (details.textContent) body.append(details);
     if (listing.highest_bidder_is_me || listing.viewer_has_bid) {
       const lead = document.createElement("span");
       lead.className = "lead-badge";
@@ -2622,28 +2748,29 @@
       if (listing.can_cancel) {
         const cancel = document.createElement("button");
         cancel.type = "button";
-        cancel.className = "btn btn-danger";
+        cancel.className = "btn btn-danger listing-action";
         cancel.textContent = "Снять";
         cancel.addEventListener("click", async () => {
           try {
             await api(`/api/listings/${listing.id}`, { method: "DELETE" });
-            await loadAccount();
+            state.collectionVisited = false;
+            if (state.activePage === "collection") refreshCollection();
             await loadMyListings();
             showNotice(`Аукцион #${listing.id} отменён.`);
           } catch (error) { showError(error); }
         });
-        body.append(cancel);
+        offer.append(cancel);
       }
     } else if (active) {
       const bid = document.createElement("button");
       bid.type = "button";
-      bid.className = "btn btn-primary";
+      bid.className = "btn btn-primary listing-action";
       bid.textContent = listing.highest_bidder_is_me ? "Повысить" : "Ставка";
       bid.disabled = listing.seller_id === state.profile?.id;
       bid.addEventListener("click", () => openBidSheet(listing));
-      body.append(bid);
+      offer.append(bid);
     }
-    item.append(body);
+    item.append(body, offer);
     return item;
   }
 
@@ -2784,78 +2911,99 @@
     finally { state.economyBusy = false; renderEconomyStatus(); }
   }
 
-  async function loadCraftCatalog(after = 0) {
-    const version = ++state.craftVersion;
-    const rarity = el("craft-rarity").value;
-    const query = el("craft-query").value;
-    const results = el("craft-results");
-    results.textContent = "Загружаем персонажей…";
-    el("craft-next").hidden = true;
-    try {
-      const data = await api(`/api/craft?${new URLSearchParams({ rarity, q: query, after })}`);
-      if (version !== state.craftVersion) return;
-      results.replaceChildren();
-      state.craftAfter = data.next_after;
-      for (const character of data.items) {
-        const row = document.createElement("article");
-        row.className = "craft-character";
-        const label = document.createElement("div");
-        const name = document.createElement("strong");
-        name.textContent = character.name;
-        const series = document.createElement("span");
-        series.className = "hint";
-        series.textContent = character.series;
-        label.append(name, series);
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "btn btn-secondary";
-        const missing = Math.max(0, character.price - state.balance);
-        button.textContent = `Создать · ${character.price} пыли${missing ? ` · не хватает ${missing}` : ""}`;
-        button.disabled = !state.profile?.economy?.craft_available || state.economyBusy;
-        button.addEventListener("click", () => createCharacterCard(character));
-        row.append(label, button);
-        results.append(row);
-      }
-      if (!data.items.length) {
-        results.textContent = "Персонажи не найдены.";
-        results.append(displayButton("Сбросить поиск и фильтры", () => {
-          el("craft-query").value = "";
-          el("craft-rarity").value = "common";
-          return loadCraftCatalog();
-        }));
-      }
-      el("craft-next").hidden = data.next_after === null;
-    } catch (error) {
-      if (version === state.craftVersion) {
-        results.replaceChildren(displayButton("Повторить загрузку персонажей", () => loadCraftCatalog(after)));
-      }
-      throw error;
-    }
+  function renderCraftRarities() {
+    const prices = state.profile?.economy?.craft_prices || {};
+    el("craft-rarities").replaceChildren(...RARITIES.filter(({ key }) => prices[key] !== undefined).map(({ key, title }) => {
+      const button = displayButton(title, () => openCraftSearch(key));
+      button.classList.add("craft-rarity-option");
+      button.dataset.rarity = key;
+      const price = document.createElement("small");
+      price.textContent = `${prices[key]} пыли`;
+      button.append(price);
+      return button;
+    }));
   }
 
-  async function createCharacterCard(character) {
-    if (state.economyBusy) return;
+  function openCraftSearch(rarity, query = "") {
+    const profile = state.profile?.economy;
+    const price = profile?.craft_prices?.[rarity];
+    if (price === undefined) return;
+    const title = RARITIES.find(({ key }) => key === rarity)?.title;
+    const body = el("craft-search-template").content.firstElementChild.cloneNode(true);
+    const input = body.querySelector("#craft-query");
+    const results = body.querySelector("#craft-results");
+    const status = body.querySelector("#craft-search-status");
+    const next = body.querySelector("#craft-next");
+    let version = 0;
+    let timer = 0;
+    let nextAfter = null;
+    const isOpen = () => body.isConnected && !el("sheet").hidden;
+    const load = async (after = 0) => {
+      if (!isOpen()) return;
+      const request = ++version;
+      const search = input.value.trim();
+      if (!after) results.replaceChildren();
+      status.textContent = "Ищем персонажей…";
+      next.hidden = true;
+      try {
+        const data = await api(`/api/craft?${new URLSearchParams({ rarity, q: search, after })}`);
+        if (!isOpen() || request !== version) return;
+        for (const character of data.items) {
+          const button = displayButton(character.name, () => createCharacterCard(character, search));
+          button.classList.add("craft-character");
+          const series = document.createElement("small");
+          series.textContent = character.series;
+          button.append(series);
+          button.disabled = !state.profile.economy.craft_available;
+          results.append(button);
+        }
+        status.textContent = data.items.length ? (state.profile.economy.craft_available ? "" : el("craft-status").textContent)
+          : "Персонажи не найдены.";
+        nextAfter = data.next_after;
+        next.hidden = nextAfter === null;
+      } catch (_error) {
+        if (isOpen() && request === version) status.replaceChildren(displayButton("Повторить поиск", () => load(after)));
+      }
+    };
+    input.value = query;
+    input.addEventListener("input", () => {
+      clearTimeout(timer);
+      version += 1;
+      results.replaceChildren();
+      status.textContent = "Ищем персонажей…";
+      next.hidden = true;
+      timer = setTimeout(load, 260);
+    });
+    body.querySelector("form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      clearTimeout(timer);
+      load();
+    });
+    next.addEventListener("click", () => load(nextAfter));
+    openSheet(`${title} · ${price} пыли`, body);
+    input.focus({ preventScroll: true });
+    load();
+  }
+
+  async function createCharacterCard(character, query) {
+    if (state.economyBusy || !state.profile?.economy?.craft_available) return;
     if (state.balance < character.price) {
-      openWallet("dust", { missing: character.price - state.balance, onBack: closeSheet });
+      openWallet("dust", { missing: character.price - state.balance, onBack: () => openCraftSearch(character.rarity, query) });
       return;
     }
     state.economyBusy = true;
+    renderEconomyStatus();
     try {
       if (!await showShopDialog({ title: "Создание карты", item: character.name,
         description: `${character.series}. Следующее создание будет доступно через 7 дней.`,
         art: "frame", price: character.price, currency: "dust" })) return;
       const result = await api("/api/craft", { method: "POST",
         body: JSON.stringify({ character_id: character.id, rarity: character.rarity }) });
-      setBalance(result.balance);
-      state.collectionVisited = false;
       state.profile.economy.craft_available = false;
       state.profile.economy.craft_available_at = result.craft_available_at;
-      renderEconomyStatus();
-      // Mark the existing catalog unavailable immediately, even if the refresh fails.
-      el("craft-results").querySelectorAll("button").forEach((button) => { button.disabled = true; });
-      showNotice(`Карта «${result.card.name}» создана и добавлена в коллекцию.`);
-      haptic("success");
-      await loadProfile();
+      if (el("craft-search-form")) closeSheet();
+      startDropOpening({ crafted: true });
+      await presentDrop(result, false);
     } catch (error) { showError(error); }
     finally { state.economyBusy = false; renderEconomyStatus(); }
   }
@@ -2907,7 +3055,6 @@
             ? upgradeMask : loadUpgradeMask(result.card),
         });
       }
-      renderHome();
       renderFavorites();
       if (state.activePage === "collection") renderCollection();
       showNotice(`Добавлен эффект: ${effect?.title || result.upgrade_level}.`);
@@ -2921,77 +3068,66 @@
     }
   }
 
+  async function downgradeCard(card, button, refund, source) {
+    if (state.economyBusy) return;
+    state.economyBusy = true;
+    button.disabled = true;
+    try {
+      const level = card.upgrade_level;
+      const effect = state.profile.economy.upgrade_effects[level - 1];
+      if (!await confirmAction(`Снять эффект «${effect.title}» с карты «${card.name}»? Вернётся ${refund} пыли.`)) return;
+      const result = await api(`/api/cards/${card.id}/downgrade`, {
+        method: "POST", body: JSON.stringify({ expected_level: level }),
+      });
+      setBalance(result.balance);
+      applyCardUpdate(result.card);
+      if (button.isConnected && !el("sheet").hidden) openCardSheet(result.card, { source });
+      renderFavorites();
+      if (state.activePage === "collection" && state.collectionMode === "cards") renderCollection();
+      showNotice(`Улучшение снято. Возвращено ${result.refund} пыли.`);
+      haptic("success");
+    } catch (error) { showError(error); }
+    finally {
+      state.economyBusy = false;
+      button.disabled = Boolean(card.lock_reason);
+      renderEconomyStatus();
+    }
+  }
+
   function renderCaseProgress() {
     const progress = state.caseCatalog?.progress;
     if (!progress) return;
-    const guarantee = progress.guarantee_in === null ? "" : ` · До гарантии: ${progress.guarantee_in}`;
-    el("case-comparison").textContent =
-      `Рамки: ${progress.owned_frames}/${progress.total_frames}${guarantee}`;
+    el("case-comparison").textContent = `Собрано рамок: ${progress.owned_frames}/${progress.total_frames}`;
     el("case-guarantee").textContent = progress.guarantee_in === null
       ? "Все рамки кейса собраны. Гарантия новой рамки пока не действует."
       : progress.guarantee_in === 1 ? "Следующее открытие гарантирует новую рамку!"
         : `Новая рамка гарантирована не позднее чем через ${progress.guarantee_in} открытий.`;
-    el("case-shards").textContent = `Осколки: ${progress.frame_shards} / ${progress.shard_cost}. Дубликат даёт ${state.caseCatalog.duplicate_frame_dust} пыли и 1 осколок.`;
-    const select = el("case-shard-frame");
-    const previous = select.value;
-    select.replaceChildren();
-    for (const frame of progress.missing_frames) {
-      const option = document.createElement("option");
-      option.value = frame.id;
-      option.textContent = frame.title;
-      select.append(option);
-    }
-    if (progress.missing_frames.some((frame) => frame.id === previous)) select.value = previous;
-    select.disabled = !progress.missing_frames.length;
-    el("case-shards-redeem").textContent = `Получить рамку · ${progress.shard_cost} осколков`;
-    el("case-shards-redeem").disabled = state.caseOpening || state.economyBusy || !progress.missing_frames.length || progress.frame_shards < progress.shard_cost;
-  }
-
-  async function redeemFrameShards() {
-    if (state.economyBusy || state.caseOpening) return;
-    const frameId = el("case-shard-frame").value;
-    const frame = state.caseCatalog?.progress.missing_frames.find((item) => item.id === frameId);
-    if (!frame) return;
-    state.economyBusy = true;
-    renderCaseProgress();
-    try {
-      if (!await confirmAction(`Получить рамку «${frame.title}» за ${state.caseCatalog.progress.shard_cost} осколков? Счётчик гарантии новой рамки обнулится.`)) return;
-      const result = await api("/api/cases/redeem", { method: "POST", body: JSON.stringify({ frame_id: frameId }) });
-      state.caseCatalog.progress = result.progress;
-      showNotice(`Получена рамка «${result.frame_title}».`);
-      haptic("success");
-    } catch (error) { showError(error); }
-    finally { state.economyBusy = false; renderCaseProgress(); }
+    const missing = new Set(progress.missing_frames.map(({ id }) => id));
+    el("case-rewards").querySelectorAll("[data-case-frame]").forEach((tile) => {
+      tile.textContent = missing.has(tile.dataset.caseFrame) ? "В коллекции пока нет" : "Уже в коллекции";
+    });
   }
 
   el("dust-ticket-buy").addEventListener("click", purchaseDustTicket);
-  el("craft-search-form").addEventListener("submit", (event) => { event.preventDefault(); loadCraftCatalog().catch(showError); });
-  el("craft-rarity").addEventListener("change", () => loadCraftCatalog().catch(showError));
-  el("craft-next").addEventListener("click", () => loadCraftCatalog(state.craftAfter || 0).catch(showError));
-  el("case-shards-redeem").addEventListener("click", redeemFrameShards);
 
   function setShopTab(name, load = true) {
     state.shopTab = name;
-    const banners = {
-      rolls: ["Билеты", "Откройте новые карточки!"],
-      frames: ["Рамки", "Сделайте свои карточки особенными!"],
-      cases: ["Кейсы", "Откройте ценные награды!"],
-      craft: ["Создание", "Превратите пыль в нужного персонажа"],
-    };
-    const [title, description] = banners[name] || banners.rolls;
+    const titles = { rolls: "Билеты", frames: "Рамки", cases: "Кейсы", craft: "Создание" };
     el("shop-banner").dataset.kind = name;
-    el("shop-banner-title").textContent = title;
-    el("shop-banner-text").textContent = description;
+    el("shop-banner").hidden = name === "gems";
+    el("shop-banner-title").textContent = titles[name] || "";
     document.querySelectorAll("[data-shop-tab]").forEach((button) => {
-      button.classList.toggle("active", button.dataset.shopTab === name);
+      const active = button.dataset.shopTab === name;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
     });
     el("rolls-pane").hidden = name !== "rolls";
     el("frames-pane").hidden = name !== "frames";
     el("cases-pane").hidden = name !== "cases";
     el("craft-pane").hidden = name !== "craft";
+    el("gems-pane").hidden = name !== "gems";
     if (name === "frames" && load) loadFrameShop().catch(showError);
     if (name === "cases") loadCaseCatalog().catch(showError);
-    if (name === "craft") loadCraftCatalog().catch(showError);
     renderEconomyStatus();
   }
 
@@ -3046,24 +3182,6 @@
     if (state.activePage === "collection") renderCollection();
   }
 
-  function renderAccountList(id, items, renderItem, emptyText) {
-    const container = el(id);
-    container.replaceChildren();
-    if (!items.length) {
-      const empty = document.createElement("div");
-      empty.className = "empty-state";
-      empty.textContent = emptyText;
-      container.append(empty);
-      return;
-    }
-    items.forEach((item) => container.append(renderItem(item)));
-  }
-
-  function createListingItem(listing, allowCancel) {
-    const article = listingCard(listing, { mine: allowCancel });
-    return article;
-  }
-
   function renderAccountCardCount(count) {
     el("account-card-count").textContent = count ?? "—";
     el("account-card-noun").textContent = cardWord(count ?? 0);
@@ -3080,14 +3198,15 @@
   }
 
   async function loadAccount() {
-    const [profile, listings, transfers, favorites, rare, epic, legendary, mythical, referrals] = await Promise.all([
-      fetchOwnProfile(), api("/api/listings"), api("/api/transfers"),
+    const [profile, favorites, rare, epic, legendary, mythical, referrals, showcases] = await Promise.all([
+      fetchOwnProfile(),
       api("/api/favorites"),
       api("/api/inventory?rarity=rare&page=1"),
       api("/api/inventory?rarity=epic&page=1"),
       api("/api/inventory?rarity=legendary&page=1"),
       api("/api/inventory?rarity=mythical&page=1"),
       api("/api/referrals"),
+      api("/api/showcases").catch(() => null),
     ]);
     state.ownedCardCount = profile.card_count;
     state.favoriteLimit = profile.favorite_limit;
@@ -3099,9 +3218,6 @@
     el("vip-status-card").hidden = !profile.vip.active;
     el("vip-status-title").textContent = profile.vip.active
       ? `Активен до ${new Date(profile.vip.expires_at * 1000).toLocaleDateString("ru-RU")}`
-      : "";
-    el("vip-status-description").textContent = profile.vip.active
-      ? "VIP-рамка профиля · значок · ускоренный дроп · бонусы пыли и наград"
       : "";
     renderAccountCardCount(profile.card_count);
     el("rare-count").textContent = rare.total + epic.total + legendary.total + mythical.total;
@@ -3116,6 +3232,12 @@
       "privacy-trades": "show_trades",
     }).forEach(([id, key]) => { el(id).checked = profile.privacy[key]; });
     renderReferrals(referrals);
+    const preview = el("profile-showcase");
+    const showcase = showcases?.items.find(({ cards }) => cards.length);
+    preview.replaceChildren();
+    preview.hidden = !showcase;
+    el("profile-showcase-empty").hidden = !showcases || Boolean(showcase);
+    if (showcase) preview.append(renderDisplay({ ...showcase, cards: showcase.cards.slice(0, 3) }));
     const bgSection = el("profile-background-section");
     const isVip = profile.vip.active;
     bgSection.hidden = !isVip;
@@ -3123,32 +3245,6 @@
       await renderBackgroundSelector();
     }
     renderFavorites();
-    renderAccountList("my-listings", listings.items, (listing) => {
-      const article = createListingItem(listing, true);
-      return article;
-    }, "Активных лотов нет.");
-    renderAccountList("my-transfers", transfers.items, (transfer) => {
-      const article = document.createElement("article");
-      article.className = "listing";
-      const title = document.createElement("strong");
-      title.textContent = `${transfer.is_gift ? "Подарок" : "Передача"} #${transfer.id}`;
-      const cards = document.createElement("span");
-      cards.className = "listing-meta";
-      cards.textContent = transfer.cards.map((card) => `#${card.id} ${card.name}`).join(", ");
-      const cancel = document.createElement("button");
-      cancel.type = "button";
-      cancel.className = "btn btn-danger";
-      cancel.textContent = "Отменить";
-      cancel.addEventListener("click", async () => {
-        try {
-          await api(`/api/transfers/${transfer.id}`, { method: "DELETE" });
-          await loadAccount();
-          showNotice(transfer.is_gift ? "Подарок отменён." : "Передача отменена.");
-        } catch (error) { showError(error); }
-      });
-      article.append(title, cards, cancel);
-      return article;
-    }, "Активных передач нет.");
   }
 
   function loadBackgrounds() {
@@ -3252,11 +3348,9 @@
   function showProfileTab(name) {
     el("account-own-view").hidden = name !== "mine";
     el("account-gallery-view").hidden = name !== "gallery";
-    document.querySelectorAll("[data-profile-tab]").forEach((button) => {
-      const active = button.dataset.profileTab === name;
-      button.classList.toggle("active", active);
-      button.setAttribute("aria-selected", String(active));
-    });
+    const settings = el("profile-settings");
+    settings.setAttribute("aria-expanded", String(name === "gallery"));
+    settings.setAttribute("aria-label", name === "gallery" ? "Закрыть настройки приватности" : "Настройки приватности");
   }
 
   async function searchPlayers(query) {
@@ -3431,6 +3525,7 @@
 
   function openNotificationSettings() {
     const labels = {
+      drop_ready: "Бесплатный дроп карты снова доступен",
       full_stock: "Полный запас открытий",
       incoming_trade: "Входящие предложения обмена",
       outbid: "Перебитые ставки",
@@ -3549,7 +3644,7 @@
   async function loadFrameShop() {
     const status = el("frame-shop-status");
     status.textContent = "Загружаем рамки…";
-    try { await Promise.all([loadFramesCatalog(), loadFrameShopCards(1)]); }
+    try { await loadFramesCatalog(); }
     catch (error) {
       status.replaceChildren(displayButton("Повторить загрузку рамок", loadFrameShop));
       throw error;
@@ -3587,8 +3682,18 @@
     renderShopPreview();
   }
 
+  let framePreviewOptions = [];
+
+  function previewFrameOnCard(frameId, frames, title) {
+    closeSheet();
+    state.frameShopFrameId = frameId;
+    openFrameShopPreview(frames, title);
+    loadFrameShopCards(1).catch(showError);
+  }
+
   function openFrameShopPreview(frames, title) {
     if (!frames.length) return;
+    framePreviewOptions = frames;
     const dialog = el("frame-shop-preview");
     const select = el("frame-shop-frame");
     select.replaceChildren(...frames.map((frame) => {
@@ -3631,11 +3736,13 @@
       image.src = url;
       image.hidden = false;
       visual.hidden = false;
-      const frame = state.shopFrames.find((item) => item.id === state.frameShopFrameId);
+      const frame = framePreviewOptions.find((item) => item.id === state.frameShopFrameId);
+      image.dataset.cardRarity = card.rarity;
       const fx = frameEffects(frame?.effect, card.rarity, frame?.rarity, frame?.accent, frame?.ornament_url, frame?.style);
       if (fx) visual.append(fx);
       status.textContent = frame
-        ? `Примерка: ${frame.title} · ${frame.id === card.frame_style ? "На этой карте" : frameStockLabel(frame)}`
+        ? `Примерка: ${frame.title}${frame.id === card.frame_style ? " · На этой карте"
+          : frame.quantity !== undefined ? ` · ${frameStockLabel(frame)}` : ""}`
         : "Примерка рамки";
     } catch (error) {
       if (dialog.open && version === state.framePreviewVersion) {
@@ -3657,6 +3764,7 @@
   }
 
   async function loadCaseCatalog() {
+    if (state.caseOpening) return;
     try {
       state.caseCatalog = await api("/api/cases");
       el("case-loading-status").replaceChildren();
@@ -3664,37 +3772,72 @@
       el("case-loading-status").replaceChildren(displayButton("Повторить загрузку кейсов", loadCaseCatalog));
       throw error;
     }
-    const table = document.createElement("table");
-    table.innerHTML = "<thead><tr><th>Награда</th><th>Шанс</th><th>Количество</th></tr></thead>";
-    const body = document.createElement("tbody");
-    state.caseCatalog.rewards.forEach((reward) => {
-      const row = document.createElement("tr");
-      const title = document.createElement("td");
-      if (reward.preview_url) {
-        const preview = document.createElement("img");
-        preview.className = "case-odds-preview";
-        preview.src = frameAssetUrl(reward.preview_url);
-        preview.alt = "";
-        preview.width = 36;
-        preview.height = 54;
-        preview.loading = "lazy";
-        title.append(preview);
-      }
-      title.append(reward.title);
-      row.append(title);
-      for (const value of [
-        `${reward.chance}%`, String(reward.quantity),
-      ]) {
-        const cell = document.createElement("td");
-        cell.textContent = value;
-        row.append(cell);
-      }
-      body.append(row);
-    });
-    table.append(body);
-    const container = el("case-odds-table");
-    container.replaceChildren(table);
+    el("case-rewards").replaceChildren(...state.caseCatalog.rewards.map((reward) => {
+      const subtitle = reward.rarity_title || `Количество · ${reward.quantity}`;
+      const tile = rewardTile(reward.title, casePrizeImage(reward.id, reward.preview_url),
+        subtitle, "", () => openCaseReward(reward), !reward.frame_id);
+      if (reward.frame_id) tile.lastElementChild.dataset.caseFrame = reward.frame_id;
+      return tile;
+    }));
     updateCaseButton();
+  }
+
+  function rewardTile(title, imageUrl, subtitle, note, action, resource = false) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "reward-tile";
+    button.classList.toggle("reward-tile--resource", resource);
+    const image = document.createElement("img");
+    image.src = imageUrl;
+    image.alt = "";
+    image.loading = "lazy";
+    image.decoding = "async";
+    const name = document.createElement("strong");
+    name.textContent = title;
+    const meta = document.createElement("span");
+    meta.textContent = subtitle;
+    const details = document.createElement("small");
+    details.textContent = note;
+    button.append(image, name, meta, details);
+    button.addEventListener("click", action);
+    return button;
+  }
+
+  function rewardVisual(imageUrl, frame) {
+    const visual = document.createElement("div");
+    visual.className = frame ? "reward-visual" : "reward-visual reward-visual--resource";
+    const image = document.createElement("img");
+    image.src = imageUrl;
+    image.alt = "";
+    image.decoding = "async";
+    visual.append(image);
+    if (frame) {
+      const effect = frameEffects(frame.effect, frame.rarity, frame.rarity, frame.accent, frame.ornament_url, frame.style);
+      if (effect) visual.append(effect);
+    }
+    return visual;
+  }
+
+  function openCaseReward(reward) {
+    const body = document.createElement("div");
+    body.className = "reward-detail";
+    const preview = casePrizeImage(reward.id, reward.live_preview_url || reward.preview_url);
+    const description = document.createElement("p");
+    description.className = "hint";
+    body.append(rewardVisual(preview, reward.frame_id ? reward : null), description);
+    if (reward.frame_id) {
+      const missing = state.caseCatalog.progress.missing_frames.some(({ id }) => id === reward.frame_id);
+      description.textContent = `Рамка · ${reward.rarity_title} · ${missing ? "В коллекции пока нет" : "Уже в коллекции"}`;
+      const tryOn = displayButton("Примерить на карте", () => {
+        const frames = state.caseCatalog.rewards.filter((item) => item.frame_id)
+          .map((item) => ({ ...item, id: item.frame_id }));
+        previewFrameOnCard(reward.frame_id, frames, "Рамки премиум-кейса");
+      });
+      body.append(tryOn);
+    } else {
+      description.textContent = reward.id === "dust" ? `${reward.quantity} пыли` : `${reward.quantity} ${ticketWord(Number(reward.quantity))}`;
+    }
+    openSheet(reward.title, body);
   }
 
   function caseRewardSummary(result) {
@@ -3705,7 +3848,9 @@
         : `Получено дополнительных круток: ${result.amount}`;
     }
     if (result.duplicate) {
-      return `Дубликат рамки «${result.frame_title}» · ${result.amount} пыли и 1 осколок`;
+      return result.frame_copies_awarded
+        ? `Получена ещё одна рамка «${result.frame_title}»`
+        : `Дубликат рамки «${result.frame_title}» · ${result.amount} пыли`;
     }
     return `Получена рамка «${result.frame_title}»`;
   }
@@ -3728,7 +3873,7 @@
     const price = state.caseCatalog.price;
     const confirmed = await showShopDialog({
       title: "Подтверждение покупки", item: "Премиум-кейс",
-      description: "Внутри — пыль, билеты или рамка. Карты из кейса не выпадают.",
+      description: "Внутри пыль, билеты или коллекционная рамка.",
       art: "case", price, currency: "crystal",
     });
     if (!confirmed || state.caseCatalog?.price !== price) {
@@ -3762,12 +3907,14 @@
       state.caseCatalog.progress = result.progress;
       renderCaseProgress();
       const prizes = rewards.map((reward) => ({
-        title: reward.preview_url ? String(reward.quantity) : `${reward.title} · ${reward.quantity}`,
+        id: reward.id,
+        title: reward.frame_id ? reward.title : `${reward.title} · ${reward.quantity}`,
         image: casePrizeImage(reward.id, reward.preview_url),
         resource: !reward.preview_url,
       }));
       const winningPreview = rewards.find((reward) => reward.id === result.reward)?.preview_url;
       await animateRoulette(prizes, {
+        id: result.reward,
         title: result.frame_title || caseRewardSummary(result),
         image: casePrizeImage(result.reward, winningPreview || result.frame_preview_url),
         resource: !result.frame_id,
@@ -3778,47 +3925,49 @@
     } finally {
       state.caseOpening = false;
       updateCaseButton();
-      const awardReward = result.duplicate ? "dust" : result.reward;
-      const fx = result.frame_id && !result.duplicate
+      const legacyDuplicate = result.duplicate && !result.frame_copies_awarded;
+      const fx = result.frame_id && !legacyDuplicate
         ? frameEffects(result.frame_effect, result.frame_rarity, result.frame_rarity,
           result.frame_accent, result.frame_ornament_url, result.frame_theme)
         : null;
       revealRouletteAward(caseRewardSummary(result),
-        casePrizeImage(awardReward, result.duplicate ? null : result.frame_preview_url), fx,
-        result.duplicate || !result.frame_id);
+        casePrizeImage(legacyDuplicate ? "dust" : result.reward, legacyDuplicate ? null : result.frame_preview_url), fx,
+        legacyDuplicate || !result.frame_id);
     }
   }
 
-  function framePackItem(frame, frames, previewTitle) {
+  function framePackItem(frame) {
     const item = document.createElement("article");
-    item.className = "frame-item";
+    item.className = "frame-pack-item";
     item.dataset.rarity = frame.rarity;
     const image = document.createElement("img");
-    image.className = "frame-preview";
+    image.className = "frame-pack-image";
     image.src = frameAssetUrl(frame.preview_url);
-    image.alt = frame.title;
+    image.alt = "";
     image.loading = "lazy";
-    const info = document.createElement("div");
-    info.className = "frame-item-info";
+    image.decoding = "async";
+    const tags = document.createElement("div");
+    tags.className = "frame-pack-tags";
+    const rarityCode = RARITIES.find(({ key }) => key === frame.rarity)?.title.split(" · ")[0];
+    const rarity = document.createElement("span");
+    rarity.className = "frame-pack-rarity";
+    rarity.textContent = rarityCode || frame.rarity_title;
+    rarity.setAttribute("aria-label", frame.rarity_title);
+    tags.append(rarity);
+    if (frame.chance !== undefined) {
+      const chance = document.createElement("span");
+      chance.className = "frame-pack-chance";
+      chance.textContent = `${frame.chance}%`;
+      chance.setAttribute("aria-label", `Шанс выпадения ${frame.chance}%`);
+      tags.append(chance);
+    }
     const title = document.createElement("strong");
+    title.className = "frame-pack-name";
     title.textContent = frame.title;
     const meta = document.createElement("span");
     meta.className = "hint";
-    meta.textContent = [frame.rarity_title, frame.chance === undefined ? "Из премиум-кейса" : `Шанс ${frame.chance}%`,
-      frameStockLabel(frame)].join(" · ");
-    info.append(title, meta);
-    const actions = document.createElement("div");
-    actions.className = "frame-item-actions";
-    const tryOn = document.createElement("button");
-    tryOn.type = "button";
-    tryOn.className = "btn btn-secondary";
-    tryOn.textContent = "Примерить";
-    tryOn.addEventListener("click", () => {
-      state.frameShopFrameId = frame.id;
-      openFrameShopPreview(frames, previewTitle);
-    });
-    actions.append(tryOn);
-    item.append(image, info, actions);
+    meta.textContent = frame.owned ? `В коллекции · ×${frame.quantity}` : "Не получена";
+    item.append(image, tags, title, meta);
     return item;
   }
 
@@ -3829,36 +3978,33 @@
     state.framePacks.forEach((pack) => {
       const section = document.createElement("section");
       section.className = "frame-pack";
-      const cover = document.createElement("img");
-      cover.className = "frame-pack-cover";
-      cover.src = frameAssetUrl(pack.cover_url);
-      cover.alt = `Пак «${pack.title}»`;
-      cover.loading = "lazy";
       const heading = document.createElement("h3");
       heading.textContent = pack.title;
       const description = document.createElement("p");
       description.className = "hint";
-      description.textContent = `Одна случайная рамка за открытие. Собрано ${pack.items.filter((item) => item.owned).length} / ${pack.items.length}. Дубликат → ${pack.duplicate_dust} пыли.`;
+      description.textContent = `Собрано ${pack.items.filter((item) => item.owned).length} / ${pack.items.length}`;
+      const header = document.createElement("header");
+      header.className = "frame-pack-heading";
+      header.append(heading, description);
       const actions = document.createElement("div");
       actions.className = "frame-pack-actions";
       [["dust", pack.dust_price, "пыли"], ["crystals", pack.crystal_price, "кристаллов"]].forEach(([currency, price, label]) => {
         const buy = document.createElement("button");
         buy.type = "button";
         buy.className = `btn btn-${currency === "dust" ? "secondary" : "primary"} frame-pack-open`;
-        buy.textContent = `Открыть · ${price} ${label}`;
+        const priceIcon = document.createElement("span");
+        priceIcon.className = `currency-icon chip-${currency === "dust" ? "dust" : "crystal"}`;
+        priceIcon.setAttribute("aria-hidden", "true");
+        buy.append("Открыть", priceIcon, String(price));
+        buy.setAttribute("aria-label", `Открыть за ${price} ${label}`);
         buy.disabled = state.packOpening;
         buy.addEventListener("click", () => openFramePack(pack, currency));
         actions.append(buy);
       });
-      const contents = document.createElement("details");
-      contents.className = "frame-pack-contents";
-      const summary = document.createElement("summary");
-      summary.textContent = `Содержимое и шансы · ${pack.items.map((frame) => `${frame.chance}%`).join(" / ")}`;
       const grid = document.createElement("div");
       grid.className = "frame-pack-items";
-      pack.items.forEach((frame) => grid.append(framePackItem(frame, pack.items, pack.title)));
-      contents.append(summary, grid);
-      section.append(cover, heading, description, actions, contents);
+      grid.append(...pack.items.map(framePackItem));
+      section.append(header, grid, actions);
       container.append(section);
     });
     const exclusives = document.createElement("details");
@@ -3868,7 +4014,7 @@
     const grid = document.createElement("div");
     grid.className = "frame-pack-items";
     const caseFrames = state.shopFrames.filter((frame) => frame.case_available ?? frame.case_only);
-    caseFrames.forEach((frame) => grid.append(framePackItem(frame, caseFrames, "Эксклюзивы премиум-кейса")));
+    grid.append(...caseFrames.map(framePackItem));
     exclusives.append(summary, grid);
     container.append(exclusives);
   }
@@ -3883,6 +4029,7 @@
     el("frame-roulette-result").textContent = status;
     el("frame-roulette-close").hidden = true;
     el("frame-roulette-track").replaceChildren();
+    el("frame-roulette-track").classList.remove("is-settled");
     el("frame-roulette-track").style.transform = "none";
     el("frame-roulette-award").replaceChildren();
     overlay.hidden = false;
@@ -3891,14 +4038,32 @@
     return overlay;
   }
 
+  let previousRoulette = null;
+
   async function animateRoulette(items, winner) {
     const track = el("frame-roulette-track");
-    const winnerIndex = 24;
-    const tiles = [];
-    for (let index = 0; index < 30; index += 1) {
-      const item = index === winnerIndex ? winner : items[index % items.length];
+    const winnerIndex = 21 + Math.floor(Math.random() * 5);
+    const reel = Array.from({ length: winnerIndex + 5 }, () => null);
+    reel[winnerIndex] = winner;
+    for (const direction of [-1, 1]) {
+      for (let index = winnerIndex + direction; index >= 0 && index < reel.length; index += direction) {
+        const neighbor = reel[index - direction];
+        const offset = index - winnerIndex;
+        const previous = previousRoulette?.winner === winner.id && previousRoulette.neighbors[offset];
+        const different = items.filter((item) => item.id !== neighbor.id && item.id !== previous);
+        const candidates = different.length ? different : items.filter((item) => item.id !== neighbor.id);
+        const pool = candidates.length ? candidates : items;
+        reel[index] = pool[Math.floor(Math.random() * pool.length)];
+      }
+    }
+    previousRoulette = {
+      winner: winner.id,
+      neighbors: { "-1": reel[winnerIndex - 1].id, 1: reel[winnerIndex + 1].id },
+    };
+    const tiles = reel.map((item, index) => {
       const tile = document.createElement("div");
       tile.className = "frame-roulette-tile";
+      tile.classList.toggle("roulette-winner", index === winnerIndex);
       const image = document.createElement("img");
       image.src = item.image;
       image.alt = "";
@@ -3906,8 +4071,8 @@
       const name = document.createElement("span");
       name.textContent = item.title;
       tile.append(image, name);
-      tiles.push(tile);
-    }
+      return tile;
+    });
     track.replaceChildren(...tiles);
     const windowRect = el("frame-roulette-window").getBoundingClientRect();
     const winnerRect = tiles[winnerIndex].getBoundingClientRect();
@@ -3916,6 +4081,7 @@
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (reduced.matches || document.hidden || !track.animate) {
       track.style.transform = end;
+      track.classList.add("is-settled");
       return;
     }
     const animation = track.animate([{ transform: "translateX(0)" }, { transform: end }],
@@ -3926,6 +4092,7 @@
     try { await animation.finished; }
     finally {
       track.style.transform = end;
+      track.classList.add("is-settled");
       animation.cancel();
       document.removeEventListener("visibilitychange", finish);
       reduced.removeEventListener("change", finish);
@@ -3962,7 +4129,7 @@
     const price = currency === "dust" ? pack.dust_price : pack.crystal_price;
     try {
       if (!await showShopDialog({ title: "Открыть пак рамок", item: pack.title,
-        description: `Выпадет одна рамка. Шансы: ${pack.items.map((frame) => `${frame.title} — ${frame.chance}%`).join(", ")}. Дубликат: ${pack.duplicate_dust} пыли.`,
+        description: `Одна рамка. ${pack.items.map((frame) => `${frame.title} — ${frame.chance}%`).join(", ")}.`,
         art: "frame", price, currency: currency === "dust" ? "dust" : "crystal" })) return;
       const overlay = showRoulette(pack.title, "Открываем пак…");
       let result;
@@ -3980,14 +4147,15 @@
         items: entry.items.map((frame) => ({ ...replace(frame), chance: frame.chance })) }));
       setBalance(result.balance);
       setCrystals(result.crystals);
-      const prize = (frame) => ({ title: frame.title, image: frameAssetUrl(frame.preview_url) });
+      const prize = (frame) => ({ id: frame.id, title: frame.title, image: frameAssetUrl(frame.preview_url) });
       try { await animateRoulette(pack.items.map(prize), prize(result.frame)); }
       catch (_error) { /* Reveal the server result even if motion is unavailable. */ }
       finally {
         const fx = frameEffects(result.frame.effect, result.frame.rarity, result.frame.rarity,
           result.frame.accent, result.frame.ornament_url, result.frame.style);
         const summary = result.duplicate
-          ? `Дубликат «${result.frame.title}» → ${result.compensation_dust} пыли.`
+          ? (result.compensation_dust ? `Дубликат «${result.frame.title}» · ${result.compensation_dust} пыли.`
+            : `Получена ещё одна рамка «${result.frame.title}»!`)
           : `Получена рамка «${result.frame.title}»!`;
         revealRouletteAward(summary, frameAssetUrl(result.frame.live_preview_url || result.frame.preview_url), fx);
       }
@@ -4005,8 +4173,17 @@
 
   el("frame-roulette-close").addEventListener("click", closeFrameRoulette);
   const frameShopPreview = el("frame-shop-preview");
-  el("frame-shop-try").addEventListener("click", () =>
-    openFrameShopPreview(state.shopFrames, "Примерка рамок"));
+  el("frame-shop-try").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      await loadFrameShopCards(1);
+      if (state.activePage === "crystals" && state.shopTab === "frames") {
+        openFrameShopPreview(state.shopFrames, "Примерка рамок");
+      }
+    } catch (error) { showError(error); }
+    finally { button.disabled = !state.shopFrames.length; }
+  });
   el("frame-shop-preview-close").addEventListener("click", () => frameShopPreview.close());
   frameShopPreview.addEventListener("close", syncBackButton);
   el("frame-shop-frame").addEventListener("change", (event) => {
@@ -4027,9 +4204,9 @@
       frameId: state.frameShopFrameId,
       onBack: () => {
         closeSheet();
+        if (state.activePage !== "crystals") return;
         loadFramesCatalog().then(() => {
           renderFrameShop();
-          renderShopPreview();
         }).catch(showError);
       },
     });
@@ -4040,12 +4217,15 @@
       method: "POST", body: JSON.stringify({ frame_id: frame.id }),
     });
     applyCardUpdate(result.card);
-    if (state.activePage === "collection" && state.collectionMode === "cards") {
-      if (!state.collectionLoading) renderCollection();
-      renderReceivedCards();
+    if (state.activePage === "collection") {
+      if (state.collectionMode === "cards") {
+        if (!state.collectionLoading) renderCollection();
+        renderReceivedCards();
+      } else if (state.collectionMode === "frames") {
+        loadFrameInventory();
+      }
     }
     if (state.activePage === "account") renderFavorites();
-    renderHome();
     showNotice(frame.id === "classic" ? "Рамка снята и возвращена в инвентарь."
       : `Рамка «${frame.title}» надета на «${result.card.name}».`);
     haptic("success");
@@ -4053,13 +4233,14 @@
   }
 
   function updateAuctionCountdowns() {
+    if (document.hidden) return;
     document.querySelectorAll("[data-auction-expiry]").forEach((element) => {
       const seconds = Math.max(
         0, Number(element.dataset.auctionExpiry) - Math.floor(Date.now() / 1000));
       element.textContent = seconds === 0 ? "Завершение…" : formatDuration(seconds);
       element.classList.toggle("is-urgent", seconds > 0 && seconds <= 120);
       if (seconds === 0) {
-        element.closest(".listing")?.querySelector("button")?.setAttribute("disabled", "true");
+        element.closest(".listing")?.querySelector(".listing-action")?.setAttribute("disabled", "true");
       }
     });
   }
@@ -4262,7 +4443,6 @@
     const removed = new Set(result.card_ids);
     state.collectionVisited = false;
     state.receivedCards = state.receivedCards.filter((card) => !removed.has(card.id));
-    state.homeCards = state.homeCards.filter((card) => !removed.has(card.id));
     state.favorites = state.favorites.filter((card) => !removed.has(card.id));
     if (removed.has(state.frameShopPinnedCard?.id)) state.frameShopPinnedCard = null;
     clearCollectionSelection();
@@ -4281,32 +4461,101 @@
       });
       removeDustedCards(result);
       if (state.activePage === "collection") refreshCollection();
-      if (state.activePage === "home") renderHome();
       showNotice(`Распылено карт: ${result.card_ids.length}. Получено ${result.amount} пыли.`);
       haptic("success");
       return true;
     } catch (error) { showError(error); }
   }
-  async function transferSelected() {
-    const cards = [...state.collectionSelected.values()];
-    if (!cards.length || state.transferSubmitting) return;
-    state.transferSubmitting = true;
-    try {
-      if (!await confirmAction(`Создать ссылку передачи: ${formatCardCount(cards.length)}? ${frameHandoffWarning(cards)}`)) return;
-      const result = await api("/api/transfers", {
-        method: "POST",
-        body: JSON.stringify({ card_ids: cards.map((card) => card.id) }),
-      });
-      state.transferLink = result.link;
-      el("transfer-link").value = result.link;
-      state.collectionSelected.clear();
-      state.selectMode = false;
-      renderCollectionSelection();
-      if (state.activePage === "collection") refreshCollection();
-      showNotice("Ссылка передачи создана и действует 24 часа.");
-      openShareLink("Ссылка передачи", result.link, "Передаю тебе карты!");
-    } catch (error) { showError(error); }
-    finally { state.transferSubmitting = false; }
+  function refreshAfterTransfer() {
+    state.collectionVisited = false;
+    if (state.activePage === "collection") refreshCollection();
+    if (state.activePage === "trade" && state.marketTab === "trade" && !state.tradeToken) {
+      loadInventory(state.page).catch(showError);
+    }
+  }
+
+  function openTransferComposer(cards, back = null) {
+    if (!cards.length) return;
+    const card = cards.length === 1 ? cards[0] : null;
+    const body = document.createElement("section");
+    body.className = "transfer-composer";
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent = "Ссылка действует 24 часа.";
+    const link = displayButton("Создать ссылку передачи", async () => {
+      if (state.transferSubmitting) return;
+      state.transferSubmitting = link.disabled = true;
+      try {
+        const warning = frameHandoffWarning(cards);
+        if (!await confirmAction(`Создать ссылку передачи? ${warning}`.trim())) return;
+        const result = await api("/api/transfers", {
+          method: "POST",
+          body: JSON.stringify({ card_ids: cards.map(({ id }) => id) }),
+        });
+        clearCollectionSelection();
+        refreshAfterTransfer();
+        if (body.isConnected && !el("sheet").hidden) {
+          openShareLink("Ссылка передачи", result.link, "Передаю тебе карты!");
+        }
+      } finally {
+        state.transferSubmitting = link.disabled = false;
+      }
+    }, false);
+    body.append(link, hint);
+    if (card) {
+      const gift = document.createElement("details");
+      gift.className = "transfer-gift";
+      const summary = document.createElement("summary");
+      summary.textContent = "Именной подарок";
+      gift.append(summary, giftForm(card));
+      body.append(gift);
+    }
+    openSheet(card ? `Передать · ${card.name}` : `Передать · ${formatCardCount(cards.length)}`, body, null, back);
+  }
+
+  function openPendingTransfers() {
+    const body = document.createElement("section");
+    body.className = "transfer-link-list";
+    openSheet("Ссылки передачи", body);
+
+    async function load() {
+      body.textContent = "Загружаем…";
+      try {
+        const { items } = await api("/api/transfers");
+        if (!body.isConnected || el("sheet").hidden) return;
+        body.replaceChildren();
+        if (!items.length) body.textContent = "Активных ссылок нет.";
+        for (const transfer of items) {
+          const row = document.createElement("article");
+          row.className = "transfer-link-row";
+          const title = document.createElement("strong");
+          const single = transfer.cards.length === 1;
+          title.textContent = single ? transfer.cards[0].name : formatCardCount(transfer.cards.length);
+          const meta = document.createElement("span");
+          meta.className = "hint";
+          meta.textContent = transfer.is_gift ? "Именной подарок"
+            : single ? "Передача по ссылке" : transfer.cards.map(({ name }) => name).join(", ");
+          const cancel = displayButton("Отменить", async () => {
+            if (cancel.disabled) return;
+            cancel.disabled = true;
+            try {
+              if (!await confirmAction("Отменить ссылку и освободить карты?")) return;
+              await api(`/api/transfers/${transfer.id}`, { method: "DELETE" });
+              refreshAfterTransfer();
+              if (body.isConnected && !el("sheet").hidden) await load();
+            } finally { cancel.disabled = false; }
+          });
+          row.append(title, meta, cancel);
+          body.append(row);
+        }
+      } catch (error) {
+        if (body.isConnected && !el("sheet").hidden) {
+          body.replaceChildren(displayButton("Повторить загрузку", load));
+          showError(error);
+        }
+      }
+    }
+    load();
   }
 
   function openShareLink(title, link, message) {
@@ -4318,7 +4567,10 @@
     input.value = link;
     input.setAttribute("aria-label", "Ссылка для отправки");
     const copy = displayButton("Копировать", async () => {
-      try { await navigator.clipboard.writeText(link); }
+      try {
+        await navigator.clipboard.writeText(link);
+        copy.textContent = "Скопировано";
+      }
       catch (_error) { input.select(); }
     });
     const send = displayButton("Отправить", () => {
@@ -4331,78 +4583,68 @@
     openSheet(title, body);
   }
 
-  function openGiftComposer(card) {
+  function giftForm(card) {
     const body = document.createElement("form");
     body.className = "gift-composer";
-    const preview = cardButton(card, false, true, null, "");
-    preview.classList.add("sheet-card");
-    preview.disabled = true;
     const recipientLabel = document.createElement("label");
-    recipientLabel.textContent = "Telegram ID получателя";
+    recipientLabel.textContent = "Получатель";
     const recipient = document.createElement("input");
     recipient.className = "field";
-    recipient.inputMode = "numeric";
-    recipient.pattern = "[0-9]+";
+    recipient.type = "search";
+    recipient.maxLength = 40;
+    recipient.placeholder = "Имя, @username или Telegram ID";
     recipient.required = true;
     recipientLabel.append(recipient);
-    const searchLabel = document.createElement("label");
-    searchLabel.textContent = "Найти игрока с публичным профилем";
-    const search = document.createElement("input");
-    search.type = "search";
-    search.maxLength = 40;
-    search.placeholder = "Имя или @username";
-    search.className = "field";
-    searchLabel.append(search);
     const matches = document.createElement("div");
     matches.className = "gift-player-results";
     matches.setAttribute("aria-live", "polite");
     let searchTimer;
-    search.addEventListener("input", () => {
+    let selectedRecipient = null;
+    recipient.addEventListener("input", () => {
       clearTimeout(searchTimer);
+      selectedRecipient = null;
       matches.replaceChildren();
-      const query = search.value.trim().replace(/^@/, "");
-      if (query.length < 2) return;
+      const query = recipient.value.trim().replace(/^@/, "");
+      if (query.length < 2 || /^\d+$/.test(query)) return;
       searchTimer = setTimeout(async () => {
         if (!body.isConnected) return;
         try {
           const { items } = await api(`/api/players?q=${encodeURIComponent(query)}`);
-          if (!body.isConnected || search.value.trim().replace(/^@/, "") !== query) return;
+          if (!body.isConnected || selectedRecipient || recipient.value.trim().replace(/^@/, "") !== query) return;
           const options = items.filter((player) => player.id !== state.profile?.id).slice(0, 6);
           if (!options.length) matches.textContent = "Игрок не найден. Можно указать его ID.";
           for (const player of options) {
             matches.append(displayButton(`${player.display_name} · ID ${player.id}`, () => {
-              recipient.value = player.id;
-              search.value = player.display_name;
+              selectedRecipient = player.id;
+              recipient.value = player.display_name;
               matches.replaceChildren();
             }));
           }
         } catch (error) {
-          if (body.isConnected && search.value.trim().replace(/^@/, "") === query) {
+          if (body.isConnected && !selectedRecipient && recipient.value.trim().replace(/^@/, "") === query) {
             matches.textContent = "Поиск недоступен. Можно указать ID.";
           }
         }
       }, 250);
     });
     const messageLabel = document.createElement("label");
-    messageLabel.textContent = "Послание · до 160 символов";
+    messageLabel.textContent = "Послание";
     const message = document.createElement("textarea");
     message.className = "field";
     message.maxLength = 160;
     message.rows = 2;
     messageLabel.append(message);
-    const note = document.createElement("p");
-    note.className = "hint";
-    note.textContent = `Попросите получателя скопировать ID из профиля Chizu. Ссылка действует 24 часа. ${hasCustomFrame(card) ? frameHandoffWarning([card]) : ""}`;
     const submit = document.createElement("button");
     submit.className = "btn btn-primary btn-block";
     submit.textContent = "Создать ссылку на подарок";
     let previousBody, requestId;
     body.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (submit.disabled) return;
-      const recipientId = Number(recipient.value);
+      if (state.transferSubmitting) return;
+      const input = recipient.value.trim();
+      const recipientId = selectedRecipient ?? (/^\d+$/.test(input) ? Number(input) : null);
       if (!Number.isSafeInteger(recipientId) || recipientId <= 0 || recipientId === state.profile?.id) {
-        showNotice("Укажите Telegram ID другого игрока.");
+        showNotice("Выберите получателя или укажите его Telegram ID.");
         return;
       }
       const payload = JSON.stringify({ card_id: card.id, recipient_id: recipientId, message: message.value });
@@ -4410,16 +4652,20 @@
         previousBody = payload;
         requestId = newRequestId();
       }
-      submit.disabled = true;
+      state.transferSubmitting = submit.disabled = true;
       try {
+        const warning = frameHandoffWarning([card]);
+        if (warning && !await confirmAction(warning)) return;
         const result = await api("/api/gifts", { method: "POST", body: payload, idempotencyKey: requestId });
-        openShareLink("Подарок готов", result.link, "Для тебя подарок в Chizu!");
-        if (state.activePage === "collection") refreshCollection();
+        refreshAfterTransfer();
+        if (body.isConnected && !el("sheet").hidden) {
+          openShareLink("Подарок готов", result.link, "Для тебя подарок в Chizu!");
+        }
       } catch (error) { showError(error); }
-      finally { submit.disabled = false; }
+      finally { state.transferSubmitting = submit.disabled = false; }
     });
-    body.append(preview, searchLabel, matches, recipientLabel, messageLabel, note, submit);
-    openSheet(`Подарить · ${card.name}`, body);
+    body.append(recipientLabel, matches, messageLabel, submit);
+    return body;
   }
 
   async function openGiftEnvelope(token) {
@@ -4444,7 +4690,7 @@
           openCardSheet(card);
           return;
         }
-        startDropOpening(true);
+        startDropOpening({ gift: true });
         const session = dropSession;
         if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
           await revealDrop(card, 0, 1, session);
@@ -4485,13 +4731,18 @@
   }
 
   el("drop-close").addEventListener("click", closeDropOpening);
-  el("drop-skip").addEventListener("click", () => {
+  function skipDropReveal() {
     if (!dropSession) return;
     dropSession.skipped = true;
     dropSession.wake?.();
     el("drop-skip").hidden = true;
-    el("drop-description").textContent = "Ожидаем ответ сервера…";
-  });
+    el("drop-to-results").hidden = true;
+    if (!el("drop-overlay").classList.contains("is-sequence")) {
+      el("drop-description").textContent = "Ожидаем ответ сервера…";
+    }
+  }
+  el("drop-skip").addEventListener("click", skipDropReveal);
+  el("drop-to-results").addEventListener("click", skipDropReveal);
   el("drop-dust").addEventListener("click", async () => {
     if (!state.lastDropCard) return;
     const card = state.lastDropCard;
@@ -4533,6 +4784,10 @@
   });
   el("sheet-close").addEventListener("click", closeSheet);
   el("sheet-backdrop").addEventListener("click", closeSheet);
+  el("sheet-body").addEventListener("click", (event) => {
+    if (el("sheet").classList.contains("sheet--card") &&
+        (event.target === event.currentTarget || event.target.classList.contains("card-detail-content"))) closeSheet();
+  });
 
   document.querySelectorAll(".info-trigger").forEach((button) => {
     button.addEventListener("click", (event) => {
@@ -4631,8 +4886,8 @@
   document.querySelectorAll(".main-nav button").forEach((button) => {
     button.addEventListener("click", () => showPage(button.dataset.page));
   });
-  document.querySelectorAll("[data-profile-tab]").forEach((button) => {
-    button.addEventListener("click", () => showProfileTab(button.dataset.profileTab));
+  el("profile-settings").addEventListener("click", () => {
+    showProfileTab(el("account-gallery-view").hidden ? "gallery" : "mine");
   });
   el("privacy-save").addEventListener("click", () =>
     saveProfilePrivacy().catch(showError));
@@ -4790,7 +5045,7 @@
     goToFirstCard();
   });
   el("dust-selected").addEventListener("click", reviewSelectedCards);
-  el("transfer-selected").addEventListener("click", transferSelected);
+  el("transfer-links-open").addEventListener("click", openPendingTransfers);
   el("sell-selected").addEventListener("click", sellSelected);
   function startAuctionSelection() {
     if (state.collectionMode !== "cards") setCollectionMode("cards");
@@ -4807,25 +5062,13 @@
   document.querySelectorAll("[data-select-action]").forEach((button) => {
     button.addEventListener("click", () => {
       const action = button.dataset.selectAction;
-      if (action === "transfer") transferSelected();
+      if (action === "transfer") openTransferComposer([...state.collectionSelected.values()]);
       if (action === "sell") {
         const cards = [...state.collectionSelected.values()];
         if (cards.length === 1) openSellSheet(cards[0]);
         else showError(new Error("Для продажи выберите одну карту."));
       }
     });
-  });
-  el("transfer-copy").addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(state.transferLink);
-    } catch { el("transfer-link").select(); }
-  });
-  el("transfer-send").addEventListener("click", () => {
-    const text = encodeURIComponent("Передаю тебе карты!");
-    if (tg?.openTelegramLink) {
-      tg.openTelegramLink(
-        `https://t.me/share/url?url=${encodeURIComponent(state.transferLink)}&text=${text}`);
-    } else window.open(state.transferLink, "_blank", "noopener");
   });
 
   const sentinel = el("collection-sentinel");

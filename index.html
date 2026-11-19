@@ -357,6 +357,7 @@
     <symbol id="icon-settings" viewBox="0 0 24 24" fill="url(#icon-violet)" stroke="#f9e4ff" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="m19.4 15 .1.1a1.8 1.8 0 1 1-2.5 2.5l-.1-.1a1.8 1.8 0 0 0-3 .9v.2a1.8 1.8 0 1 1-3.6 0v-.2a1.8 1.8 0 0 0-3-.9l-.1.1a1.8 1.8 0 1 1-2.5-2.5l.1-.1a1.8 1.8 0 0 0-.9-3h-.2a1.8 1.8 0 1 1 0-3.6h.2a1.8 1.8 0 0 0 .9-3l-.1-.1a1.8 1.8 0 1 1 2.5-2.5l.1.1a1.8 1.8 0 0 0 3-.9v-.2a1.8 1.8 0 1 1 3.6 0v.2a1.8 1.8 0 0 0 3 .9l.1-.1a1.8 1.8 0 1 1 2.5 2.5l-.1.1a1.8 1.8 0 0 0 .9 3h.2a1.8 1.8 0 1 1 0 3.6h-.2a1.8 1.8 0 0 0-.9 3Z"/></symbol>
     <symbol id="icon-chizu" viewBox="0 0 32 32"><path fill="currentColor" d="M16 2.5c2.8 0 3.3 4.3 5.2 5.1 1.9.8 5.5-1.6 7.5.4s-.4 5.6.4 7.5c.8 1.9 5.1 2.4 5.1 5.2s-4.3 3.3-5.1 5.2c-.8 1.9 1.6 5.5-.4 7.5s-5.6-.4-7.5.4c-1.9.8-2.4 5.1-5.2 5.1s-3.3-4.3-5.2-5.1c-1.9-.8-5.5 1.6-7.5-.4s.4-5.6-.4-7.5C2.1 24 0 23.5 0 20.7s4.3-3.3 5.1-5.2c.8-1.9-1.6-5.5.4-7.5s5.6.4 7.5-.4C14.9 6.8 13.2 2.5 16 2.5Z" transform="translate(2 1) scale(.88)"/><path fill="#fff1ff" d="M16 8.2c1.8 2.2 2.6 3.7 2.6 5.2a2.6 2.6 0 0 1-5.2 0c0-1.5.8-3 2.6-5.2Zm-5.1 6.1c.8 2.7.9 4.4.2 5.7a2.6 2.6 0 0 1-4.6-2.4c.7-1.3 2.1-2.3 4.4-3.3Zm10.2 0c2.3 1 3.7 2 4.4 3.3a2.6 2.6 0 0 1-4.6 2.4c-.7-1.3-.6-3 .2-5.7Zm-5.1 4.2c1.6 0 4.7.8 4.7 2.5 0 1.6-2.1 2.8-4.7 2.8s-4.7-1.2-4.7-2.8c0-1.7 3.1-2.5 4.7-2.5Z"/></symbol>
     <symbol id="icon-card" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2.5" transform="rotate(-12 12 12)" fill="url(#icon-violet)" stroke="#ffe3ff" stroke-width="1.3"/><path d="m11.3 7 .9 2.5 2.5.4-2 1.5.4 2.5-2.1-1.3-2.2 1.3.5-2.5-2-1.5 2.5-.4z" fill="#fff3ff"/></symbol>
+    <symbol id="icon-heart" viewBox="0 0 24 24"><path fill="currentColor" d="M12 21S3 15.7 3 9.5A4.5 4.5 0 0 1 12 8a4.5 4.5 0 0 1 9 1.5C21 15.7 12 21 12 21Z"/></symbol>
     <symbol id="icon-gift" viewBox="0 0 24 24"><path d="M4 10h16v10H4z" fill="url(#icon-violet)" stroke="#ffdbff" stroke-width="1.2" stroke-linejoin="round"/><path d="M3 7h18v4H3z" fill="url(#icon-gold)" stroke="#fff0d4" stroke-width="1.2"/><path d="M12 7v13" stroke="#fff0d4" stroke-width="2"/><path d="M12 7H8.5a2.5 2.5 0 1 1 2.5-2.5V7Zm0 0h3.5a2.5 2.5 0 1 0-2.5-2.5V7Z" fill="url(#icon-gold)" stroke="#fff0d4" stroke-width="1.2"/></symbol>
   </svg>
 
@@ -386,6 +387,7 @@
     <div id="notice" class="notice"></div>
 
     <section id="home-page" class="page-view">
+      <h1 class="screen-title">Главная</h1>
       <div class="sakura-petals" aria-hidden="true">
         <span></span><span></span><span></span><span></span>
         <span></span><span></span><span></span><span></span>
@@ -394,28 +396,27 @@
       <div class="hero">
         <div id="drop-ring" class="drop-ring">
           <span class="summon-ring-track" aria-hidden="true"></span>
-          <span class="summon-ring-stars" aria-hidden="true"></span>
+          <div id="drop-slots" class="drop-slots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
           <div id="home-summon" class="card-back card-back-illustrated" role="group" tabindex="0"
                aria-label="Карта призыва. Вращайте перетаскиванием или клавишами со стрелками. Escape сбрасывает наклон.">
             <div class="home-summon-motion">
               <div class="home-summon-card">
-                <img class="home-summon-image" data-static-src="summon-card-hero.webp" alt="" decoding="async" fetchpriority="high" draggable="false">
+                <img class="home-summon-image" data-static-src="summon-card-back.webp" data-static-fallback="summon-card-back.png" alt="" decoding="async" fetchpriority="high" draggable="false">
               </div>
             </div>
           </div>
         </div>
         <div class="stock-panel" aria-label="Бесплатные открытия">
           <div class="stock-heading">
-            <div class="stock-title"><strong>Бесплатные открытия</strong><span>Ваш запас призывов</span></div>
+            <div class="stock-title"><strong>Бесплатные открытия</strong></div>
             <strong id="free-drop-count" aria-live="polite">— / 5</strong>
           </div>
-          <div id="drop-slots" class="drop-slots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
           <p id="drop-timer" class="drop-timer">Загружаем запас…</p>
           <p id="drop-error" class="drop-error" role="alert" hidden></p>
           <button id="drop-retry" class="drop-retry" type="button" hidden>Попробовать снова</button>
           <div id="drop-actions" class="drop-actions" hidden>
-            <button id="drop-all-button" class="btn btn-primary" type="button" hidden disabled>Открыть все</button>
             <button id="drop-button" class="btn btn-secondary" type="button" disabled>Открыть карту</button>
+            <button id="drop-all-button" class="btn btn-primary" type="button" hidden disabled>Открыть все</button>
           </div>
         </div>
         <section id="home-ticket-panel" class="ticket-panel" aria-label="Дополнительные билеты" hidden>
@@ -424,7 +425,7 @@
             <span>Дополнительные билеты</span>
             <strong id="home-ticket-count"></strong>
           </div>
-          <button id="ticket-drop-button" class="btn btn-secondary" type="button" disabled>Использовать 1 билет</button>
+          <button id="ticket-drop-button" class="btn btn-secondary" type="button" disabled>Открыть по билету</button>
         </section>
       </div>
       <article class="daily-banner">
@@ -434,16 +435,15 @@
           Забрать <svg class="button-sparkle" aria-hidden="true"><use href="#icon-star"></use></svg>
         </button>
       </article>
-      <h2 class="section-label">Последние карты</h2>
-      <div id="home-showcase" class="recent-row"></div>
     </section>
 
     <section id="collection-page" class="page-view" hidden>
-      <div class="page-banner page-banner--collection"><h1>Коллекция</h1></div>
+      <h1 class="screen-title">Коллекция</h1>
       <div class="tabs" role="group" aria-label="Разделы коллекции">
         <button type="button" data-collection-mode="cards" class="active" aria-pressed="true">Карты</button>
         <button type="button" data-collection-mode="albums" aria-pressed="false">Альбомы</button>
         <button type="button" data-collection-mode="duplicates" aria-pressed="false">Дубликаты</button>
+        <button type="button" data-collection-mode="frames" aria-pressed="false">Инвентарь</button>
       </div>
       <div id="collection-catalog">
         <div id="collection-empty" class="empty-state" hidden>
@@ -461,11 +461,16 @@
           <section class="collection-tools" aria-label="Поиск и фильтры коллекции">
             <div class="search-row collection-search-row">
               <svg class="collection-search-icon" aria-hidden="true"><use href="#icon-search"></use></svg>
-              <input id="collection-search" type="search" maxlength="100" placeholder="Имя или серия" aria-label="Поиск по имени или серии">
+              <input id="collection-search" type="search" maxlength="100" placeholder="Имя или аниме" aria-label="Поиск по имени или аниме">
             </div>
-            <div class="chip-row" id="collection-quick-chips" aria-label="Быстрый фильтр"></div>
             <details id="collection-filters">
-              <summary id="collection-filter-summary">Фильтры и сортировка</summary>
+              <summary id="collection-filter-summary" aria-label="Фильтры и сортировка">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8v5l-4 2v-7z"/></svg>
+              </summary>
+              <div class="collection-filter-group">
+                <span class="collection-filter-label">Карты</span>
+                <div class="chip-row" id="collection-quick-chips" aria-label="Быстрый фильтр"></div>
+              </div>
               <div class="collection-filter-group">
                 <span class="collection-filter-label">Редкость</span>
                 <div class="chip-row" id="rarity-chips" aria-label="Фильтр редкости"></div>
@@ -486,7 +491,6 @@
           </div>
           <button id="collection-select" class="btn btn-secondary collection-select" type="button">Выбрать карты</button>
           <button id="collection-layout" class="btn btn-secondary collection-select" type="button" aria-pressed="false">Компактный список</button>
-          <p class="collection-help">★ — избранное. Замок — карта в обмене, передаче или на аукционе.</p>
           <div id="collection-cards" class="card-grid"></div>
           <div id="collection-sentinel"></div>
           <button id="collection-more" class="btn btn-secondary btn-block" type="button" hidden>Показать ещё карты</button>
@@ -524,20 +528,29 @@
           <button id="collection-copy-review" class="btn btn-primary btn-block" type="button" disabled>Проверить распыление</button>
         </div>
       </section>
+      <section id="collection-frames" hidden>
+        <div class="collection-list-heading">
+          <h2 class="section-label">Мои рамки</h2>
+          <span id="frame-inventory-count" class="hint"></span>
+        </div>
+        <label class="frame-inventory-filter">
+          <input id="frame-inventory-available" type="checkbox"> Только свободные
+        </label>
+        <p id="frame-inventory-status" class="hint" role="status"></p>
+        <div id="frame-inventory-items" class="reward-grid"></div>
+      </section>
       <div class="hidden-contract">
         <span id="selection-label">Выбрано: 0</span>
         <button id="dust-selected" type="button">Распылить выбранные</button>
-        <button id="transfer-selected" type="button">Передать выбранные</button>
         <input id="auction-start-price" type="number">
         <button id="sell-selected" type="button">Создать аукцион</button>
         <select id="rarity-filter"><option value=""></option></select>
         <select id="sort-filter"><option value="new"></option></select>
-        <div id="transfer-share"><input id="transfer-link" readonly><button id="transfer-copy" type="button">Копировать</button><button id="transfer-send" type="button">Отправить</button></div>
       </div>
     </section>
 
     <section id="trade-page" class="page-view" hidden>
-      <div class="page-banner page-banner--market"><span>CHIZU / МАРКЕТ</span><h1>Маркет</h1><p>Находите карты и обменивайтесь</p></div>
+      <h1 class="screen-title">Маркет</h1>
       <div class="tabs" role="tablist">
         <button type="button" data-market-tab="all" class="active">Все лоты</button>
         <button type="button" data-market-tab="mine">Мои лоты</button>
@@ -560,6 +573,7 @@
         <div id="my-market-listings"></div>
       </div>
       <section id="trade-pane" hidden aria-label="Обмен картами">
+        <button id="transfer-links-open" class="btn btn-secondary" type="button" aria-haspopup="dialog">Ссылки передачи <span aria-hidden="true">›</span></button>
         <section class="tradebox">
           <div class="trade-head">
             <strong id="trade-title">Новое предложение</strong>
@@ -611,20 +625,23 @@
     </section>
 
     <section id="crystals-page" class="page-view" hidden>
-      <header class="shop-header">
-        <span class="game-icon game-icon-shop shop-header-icon" aria-hidden="true"></span>
-        <div><span class="shop-kicker">CHIZU / МАГАЗИН</span><h1 class="shop-heading">Магазин</h1><p>Всё для новых встреч и вашей коллекции</p></div>
-      </header>
+      <h1 class="screen-title">Магазин</h1>
       <div class="tabs shop-tabs" aria-label="Разделы магазина">
-        <button type="button" data-shop-tab="rolls" class="active"><svg class="shop-tab-icon" aria-hidden="true"><use href="#icon-roll"></use></svg><span>Билеты</span></button>
-        <button type="button" data-shop-tab="frames"><svg class="shop-tab-icon" aria-hidden="true"><use href="#icon-card"></use></svg><span>Рамки</span></button>
-        <button type="button" data-shop-tab="cases"><svg class="shop-tab-icon" aria-hidden="true"><use href="#icon-gift"></use></svg><span>Кейсы</span></button>
-        <button type="button" data-shop-tab="craft"><svg class="shop-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 20 12-12 3 3L7 23z" transform="translate(0 -2)"/><path d="m12 10 3 3M5 3v4M3 5h4M18 2v4M16 4h4M20 15v4M18 17h4"/></svg><span>Создание</span></button>
+        <button type="button" data-shop-tab="rolls" aria-controls="rolls-pane" aria-pressed="false"><span class="shop-category-art" aria-hidden="true"></span><span class="shop-category-label">Билеты</span></button>
+        <button type="button" data-shop-tab="frames" aria-controls="frames-pane" aria-pressed="true" class="active"><span class="shop-category-art" aria-hidden="true"></span><span class="shop-category-label">Рамки</span></button>
+        <button type="button" data-shop-tab="cases" aria-controls="cases-pane" aria-pressed="false"><span class="shop-category-art" aria-hidden="true"></span><span class="shop-category-label">Кейсы</span></button>
+        <button type="button" data-shop-tab="craft" aria-controls="craft-pane" aria-pressed="false"><span class="shop-category-art" aria-hidden="true"></span><span class="shop-category-label">Создание</span></button>
       </div>
-      <div class="shop-banner" id="shop-banner" data-kind="rolls">
-        <div><h2 id="shop-banner-title">Билеты</h2><p id="shop-banner-text">Откройте новые<br>карточки!</p></div>
+      <button id="crystal-shop-entry" class="crystal-shop-entry" type="button" data-shop-tab="gems"
+        aria-controls="gems-pane" aria-pressed="false">
+        <span class="crystal-shop-art" aria-hidden="true"></span>
+        <span><strong>Кристаллы</strong><small>Telegram Stars</small></span>
+        <span class="crystal-shop-arrow" aria-hidden="true">›</span>
+      </button>
+      <div class="shop-banner" id="shop-banner" data-kind="frames">
+        <div><h2 id="shop-banner-title">Рамки</h2></div>
       </div>
-      <div id="rolls-pane">
+      <div id="rolls-pane" hidden>
         <article class="economy-panel">
           <h2>Ежедневный билет за пыль</h2>
           <p class="hint">Один билет в сутки. Лимит обновляется в 00:00 по Москве.</p>
@@ -662,40 +679,45 @@
             </div>
           </article>
         </div>
-        <section class="economy-panel" aria-label="Пополнение кристаллов">
-          <h2>Пакеты кристаллов</h2>
-          <div id="crystal-star-packs" class="roll-packages"></div>
+      </div>
+      <div id="gems-pane" hidden>
+        <section class="economy-panel crystal-packs-panel" aria-label="Пополнение кристаллов">
+          <div class="crystal-packs-heading">
+            <h2>Пакеты кристаллов</h2>
+            <span><span class="chip-crystal currency-icon icon-sm" aria-hidden="true"></span>
+              <span id="crystal-shop-balance">0</span></span>
+          </div>
+          <div id="crystal-star-packs" class="crystal-pack-grid"></div>
           <p id="crystal-payment-status" class="hint" role="status"></p>
           <details>
             <summary>Условия покупки</summary>
-            <p class="hint">Пакет пополняет игровой баланс на указанное число кристаллов после подтверждения оплаты Telegram. Состав и шансы рамок показаны отдельно перед их открытием. Вопросы по начислению и возврату — /paysupport в боте с номером платежа из квитанции.</p>
+            <p class="hint">Кристаллы поступят на игровой баланс после подтверждения оплаты. По вопросам начисления и возврата отправьте /paysupport в боте и укажите номер платежа из квитанции.</p>
           </details>
-          <p class="hint">Оплата в Telegram Stars. Помощь с оплатой — /paysupport в боте.</p>
         </section>
       </div>
       <div id="craft-pane" hidden>
-        <article class="economy-panel">
-          <h2>Создать нужного персонажа</h2>
-          <p class="hint">Одна карта раз в 7 дней: обычная — 100, редкая — 300, эпическая — 1000 пыли. Новый номер экземпляра; карту можно продавать и передавать.</p>
+        <section class="economy-panel">
+          <h2>Выберите редкость</h2>
           <p id="craft-status" class="hint" role="status"></p>
-          <form id="craft-search-form" class="economy-search">
-            <label for="craft-rarity">Редкость</label>
-            <select id="craft-rarity" class="field"><option value="common">Обычная · 100</option><option value="rare">Редкая · 300</option><option value="epic">Эпическая · 1000</option></select>
-            <label for="craft-query">Персонаж или серия</label>
-            <input id="craft-query" class="field" type="search" maxlength="100" placeholder="Имя или название серии">
-            <button class="btn btn-secondary" type="submit">Найти</button>
-          </form>
-          <div id="craft-results" class="craft-results" aria-live="polite"></div>
-          <button id="craft-next" class="btn btn-secondary btn-block" type="button" hidden>Следующие персонажи →</button>
-        </article>
+          <div id="craft-rarities" class="craft-rarities"></div>
+        </section>
+        <template id="craft-search-template">
+          <div class="craft-search-content">
+            <form id="craft-search-form" class="economy-search">
+              <label for="craft-query">Имя персонажа или аниме</label>
+              <input id="craft-query" class="field" type="search" maxlength="100" placeholder="Введите имя или название">
+            </form>
+            <p id="craft-search-status" class="hint" role="status"></p>
+            <div id="craft-results" class="craft-results"></div>
+            <button id="craft-next" class="btn btn-secondary btn-block" type="button" hidden>Показать ещё</button>
+          </div>
+        </template>
       </div>
-      <div id="frames-pane" hidden>
-        <div class="collection-meta">
+      <div id="frames-pane">
+        <div class="frame-shop-toolbar">
           <span id="frame-shop-balance">0 пыли</span>
-        </div>
-        <div class="action-with-info">
           <button id="frame-shop-try" class="btn btn-secondary btn-block" type="button" disabled>
-            Примерка на вашей карте
+            Примерить рамки
           </button>
           <button id="frame-info" class="info-trigger" type="button"
             aria-label="Информация о рамках"
@@ -724,77 +746,67 @@
             <button id="case-info" class="info-trigger" type="button"
               aria-label="Информация о премиум-кейсе"
               data-info-title="Премиум-кейс"
-              data-info-text="Базовый шанс рамки — 60%. Если 9 открытий подряд не дали новую рамку, десятое гарантирует недостающую. Любая новая рамка обнуляет счётчик, включая обмен осколков. Когда все рамки собраны, гарантия не действует. Дубликат даёт 80 пыли и 1 осколок; 5 осколков можно обменять на недостающую рамку.">
+              data-info-text="Если девять открытий подряд не дали новую рамку, десятое гарантирует недостающую. Новая рамка начинает отсчёт заново. Повторные рамки добавляются в инвентарь.">
               <svg class="icon-sm" aria-hidden="true"><use href="#icon-info"></use></svg>
             </button>
           </div>
         </article>
         <p id="case-balance-hint" class="hint"></p>
         <div id="case-loading-status" role="status"></div>
-        <section class="economy-panel">
+        <section class="economy-panel" aria-labelledby="case-contents-title">
+          <h2 id="case-contents-title">Содержимое кейса</h2>
           <p id="case-guarantee" class="hint" role="status"></p>
-          <p id="case-shards" class="hint"></p>
-          <label for="case-shard-frame">Рамка за осколки</label>
-          <select id="case-shard-frame" class="field"></select>
-          <button id="case-shards-redeem" class="btn btn-secondary btn-block" type="button" disabled>Получить рамку</button>
+          <div id="case-rewards" class="reward-grid"></div>
         </section>
-        <details class="economy-panel">
-          <summary>Содержимое и шансы</summary>
-          <p class="hint">При срабатывании гарантии выпадает одна из недостающих рамок с весом её редкости.</p>
-          <div id="case-odds-table" class="case-odds"></div>
-        </details>
       </div>
     </section>
 
     <section id="account-page" class="page-view" hidden>
       <div id="account-load-status" role="status"></div>
+      <div class="profile-toolbar">
+        <h1 class="screen-title">Профиль</h1>
+        <button id="profile-settings" class="icon-btn" type="button" aria-label="Настройки приватности" aria-controls="account-gallery-view" aria-expanded="false">
+          <span class="game-icon game-icon-settings" aria-hidden="true"></span>
+        </button>
+      </div>
       <div class="profile-head">
         <div id="account-avatar" class="avatar" role="img" aria-label="Аватар Telegram"></div>
         <div class="profile-intro">
-          <span class="profile-kicker">CHIZU · ПРОФИЛЬ ИГРОКА</span>
-          <h2 id="account-name">Загружаем профиль…</h2>
-          <span id="profile-tier-badge" class="profile-tier-badge" hidden>✦ VIP</span>
+          <div class="profile-name">
+            <h2 id="account-name">Загружаем профиль…</h2>
+            <span id="profile-tier-badge" class="profile-tier-badge" hidden>✦ VIP</span>
+          </div>
           <p class="hint" id="welcome">Ваш игровой профиль</p>
         </div>
       </div>
-      <section class="player-search-panel" aria-label="Поиск игроков">
-        <h2 class="section-label">Найти игрока</h2>
-        <div class="search-row">
-          <svg class="profile-search-icon" aria-hidden="true"><use href="#icon-search"></use></svg>
-          <input id="player-search" type="search" placeholder="Имя игрока"
-            aria-label="Поиск игроков по имени" autocomplete="off">
-        </div>
-        <div id="player-search-results" class="player-list"></div>
-      </section>
-      <div class="profile-tabs" role="tablist" aria-label="Разделы профиля">
-        <button class="active" type="button" data-profile-tab="mine" role="tab"
-          aria-selected="true">Мой профиль</button>
-        <button type="button" data-profile-tab="gallery" role="tab"
-          aria-selected="false">Приватность</button>
-      </div>
       <div id="account-own-view">
-      <h2 class="section-label profile-section-title">Ваша коллекция</h2>
       <div class="stats">
         <div class="stat"><strong id="account-card-count">—</strong><span id="account-card-noun">карт</span></div>
         <div class="stat"><strong id="rare-count">—</strong><span>редких+</span></div>
         <div class="stat"><strong id="legendary-count">—</strong><span>легендарных</span></div>
         <div class="stat"><strong id="trade-count">—</strong><span>обменов</span></div>
       </div>
-      <h2 class="section-label">Избранные карты</h2>
-      <div id="favorite-cards" class="card-grid"></div>
       <section class="showcase-entry">
-        <span class="profile-kicker">CHIZU · ЛИЧНАЯ ГАЛЕРЕЯ</span>
-        <h2>Коллекция с вашим характером</h2>
-        <p class="hint">Соберите любимые карты в витрину, подберите оформление и поделитесь ею.</p>
-        <button id="showcases-open" class="btn btn-primary btn-block" type="button">Мои витрины <span aria-hidden="true">↗</span></button>
+        <h2><button id="showcases-open" class="btn btn-primary btn-block" type="button" aria-label="Открыть мои витрины">
+          <span>Мои витрины</span><span class="showcase-open-label" aria-hidden="true">Открыть <span>›</span></span>
+        </button></h2>
+        <div id="profile-showcase" hidden></div>
+        <p id="profile-showcase-empty" class="hint" hidden>Соберите витрину из любимых карт.</p>
       </section>
-      <span id="favorite-count" class="hidden-contract">0 / 3</span>
       <article id="vip-status-card" class="vip-status-card" hidden>
         <strong class="vip-status-heading"><span class="vip-badge">VIP</span><span id="vip-status-title"></span></strong>
-        <span id="vip-status-description" class="hint"></span>
-        <button id="vip-history-open" class="btn btn-secondary" type="button"
-          aria-haspopup="dialog" aria-controls="vip-history-dialog">История выпадений</button>
+        <button id="vip-history-open" class="profile-action" type="button"
+          aria-haspopup="dialog" aria-controls="vip-history-dialog">История выпадений <span aria-hidden="true">›</span></button>
       </article>
+      <details id="profile-background-section" class="background-section" hidden>
+        <summary class="profile-action">Фон профиля <span aria-hidden="true">›</span></summary>
+        <div id="background-selector" class="background-selector"></div>
+        <button id="background-reset" class="btn btn-secondary btn-block" type="button">Сбросить фон</button>
+      </details>
+      <details class="profile-favorites">
+        <summary class="profile-action">Избранные карты <span id="favorite-count">0 / 3</span></summary>
+        <div id="favorite-cards" class="card-grid"></div>
+      </details>
       <section class="referral-panel">
         <h2 class="section-label">Пригласить друга</h2>
         <p class="hint">Друг получит VIP на 3 дня, а вы — на 7 дней после его первой регистрации.</p>
@@ -810,23 +822,7 @@
         </div>
         <div id="referral-history" class="referral-history"></div>
       </section>
-      <section id="profile-background-section" class="background-section" hidden>
-        <h2 class="section-label">Фон профиля</h2>
-        <p class="hint">Выбранный фон виден во всём приложении и в вашем публичном профиле.</p>
-        <div id="background-selector" class="background-selector"></div>
-        <button id="background-reset" class="btn btn-secondary btn-block" type="button">
-          Сбросить фон
-        </button>
-      </section>
-      <h2 class="section-label">Активные лоты</h2>
-      <div id="my-listings"></div>
-      <h2 class="section-label">Ссылки передачи</h2>
-      <div id="my-transfers"></div>
-      <div class="profile-settings-actions">
-        <button id="notification-settings" class="btn btn-secondary btn-block" type="button">Уведомления Telegram</button>
-      </div>
       <div class="hidden-contract">
-        <div id="home-avatar"></div>
         <span id="card-count">0</span>
         <span id="extra-roll-count">0</span>
         <button id="extra-roll-button" type="button"></button>
@@ -837,7 +833,6 @@
       </div>
       <div id="account-gallery-view" hidden>
         <h2 class="section-label">Публичный профиль</h2>
-        <p class="hint">Настройте, какую информацию о вас видят другие игроки.</p>
         <section class="privacy-panel">
           <strong>Настройки моего профиля</strong>
           <label><input id="privacy-public" type="checkbox"> Показывать профиль в галерее</label>
@@ -849,7 +844,18 @@
             Сохранить настройки
           </button>
         </section>
+        <button id="notification-settings" class="btn btn-secondary btn-block" type="button"
+          aria-haspopup="dialog">Уведомления Telegram</button>
       </div>
+      <section class="player-search-panel" aria-label="Поиск игроков">
+        <h2 class="section-label">Найти игрока</h2>
+        <div class="search-row">
+          <svg class="profile-search-icon" aria-hidden="true"><use href="#icon-search"></use></svg>
+          <input id="player-search" type="search" placeholder="Имя игрока"
+            aria-label="Поиск игроков по имени" autocomplete="off">
+        </div>
+        <div id="player-search-results" class="player-list"></div>
+      </section>
     </section>
 
     <section id="player-page" class="page-view" hidden>
@@ -929,7 +935,7 @@
       <span class="icon game-icon game-icon-market" aria-hidden="true"></span>
       <span>Маркет</span>
     </button>
-    <button type="button" data-page="home" class="active">
+    <button type="button" data-page="home" class="active" aria-current="page">
       <span class="nav-fab"><span class="icon game-icon game-icon-home" aria-hidden="true"></span></span>
       <span>Главная</span>
     </button>
@@ -1026,8 +1032,11 @@
         <div class="drop-flash"></div>
         <div id="drop-particles" class="drop-particles"></div>
       </div>
+      <div id="drop-sequence" class="drop-sequence" aria-hidden="true" hidden></div>
       <div id="drop-results" class="drop-results" aria-label="Полученные карты" hidden></div>
       <p id="drop-description" class="drop-description">Кажется, внутри что-то есть…</p>
+      <p id="drop-progress" class="drop-progress" role="status" hidden></p>
+      <button id="drop-to-results" class="btn btn-primary" type="button" hidden>К результатам</button>
       <div id="drop-followup" class="drop-followup" hidden>
         <button id="drop-to-collection" class="btn btn-primary btn-block" type="button">В коллекцию</button>
         <button id="drop-dust" class="btn btn-danger btn-block" type="button">Распылить</button>
