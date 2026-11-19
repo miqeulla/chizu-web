@@ -5369,6 +5369,7 @@
     if (!item?.link || button.disabled) return;
     const status = el("showcase-share-status");
     const chat = el("showcase-share-chat");
+    const shareDialog = typeof tg?.shareMessage === "function" && Boolean(tg.isVersionAtLeast?.("8.0"));
     const stillViewing = () => state.activePage === "showcases" && displayState.mode === "view" &&
       displayState.viewed === item;
     button.disabled = true;
@@ -5376,14 +5377,16 @@
     chat.hidden = true;
     status.textContent = "";
     try {
-      const { message_id, bot_link } = await api(`/api/showcases/${encodeURIComponent(item.token)}/share`, { method: "POST" });
+      const { message_id, bot_link } = await api(`/api/showcases/${encodeURIComponent(item.token)}/share`, {
+        method: "POST", body: JSON.stringify({ share_dialog: shareDialog }),
+      });
       if (!stillViewing()) return;
       if (bot_link) {
         chat.href = bot_link;
         chat.hidden = false;
         status.textContent = "Коллаж со ссылкой уже в чате с Chizu. Его можно переслать оттуда.";
       }
-      if (message_id && tg?.shareMessage && tg.isVersionAtLeast?.("8.0")) tg.shareMessage(message_id);
+      if (message_id && shareDialog) tg.shareMessage(message_id);
     } catch (error) {
       if (stillViewing() && chat.hidden) {
         status.textContent = error.message || "Не удалось подготовить витрину. Попробуйте ещё раз.";
