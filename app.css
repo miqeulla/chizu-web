@@ -48,6 +48,7 @@
 .showcase-footer { margin-top: 17px; text-align: center; font-size: 9px; letter-spacing: 3px; color: var(--display-accent); opacity: .7; }
 .showcase-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 20px; }
 .showcase-actions .btn { flex: 1; }
+#showcase-share-chat[hidden] { display: none; }
 .showcase-label { display: block; margin: 16px 0 8px; color: var(--muted); }
 #showcase-editor .field, #showcase-link { width: 100%; min-height: 48px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
 .showcase-privacy { display: flex; align-items: center; gap: 10px; min-height: 44px; }

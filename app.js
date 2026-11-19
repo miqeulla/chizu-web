@@ -5292,6 +5292,7 @@
     el("showcase-author").textContent = `Коллекция игрока ${item.author}`;
     el("showcase-sharing").hidden = !item.link;
     el("showcase-link").value = item.link || "";
+    el("showcase-share-chat").hidden = true;
     el("showcase-share-status").textContent = item.link ? "" : "Личная витрина. Для отправки включите публикацию в редакторе.";
   }
 
@@ -5356,29 +5357,37 @@
     try { await navigator.clipboard.writeText(el("showcase-link").value); showNotice("Ссылка скопирована."); }
     catch { el("showcase-link").focus(); el("showcase-link").select(); }
   });
+  el("showcase-share-chat").addEventListener("click", (event) => {
+    if (!tg?.openTelegramLink) return;
+    event.preventDefault();
+    tg.openTelegramLink(event.currentTarget.href);
+    tg.close?.();
+  });
   el("showcase-share").addEventListener("click", async (event) => {
     const item = displayState.viewed;
     const button = event.currentTarget;
     if (!item?.link || button.disabled) return;
     const status = el("showcase-share-status");
-    if (!tg?.shareMessage || !tg.isVersionAtLeast?.("8.0")) {
-      status.textContent = "На этой версии Telegram отправится только ссылка. Обновите Telegram, чтобы добавить картинку.";
-      const url = `https://t.me/share/url?url=${encodeURIComponent(item.link)}&text=${encodeURIComponent("Витрина в Chizu ✦")}`;
-      if (tg?.openTelegramLink) tg.openTelegramLink(url);
-      else window.open(url, "_blank", "noopener");
-      return;
-    }
-
+    const chat = el("showcase-share-chat");
     const stillViewing = () => state.activePage === "showcases" && displayState.mode === "view" &&
       displayState.viewed === item;
     button.disabled = true;
     button.textContent = "Готовим картинку…";
+    chat.hidden = true;
     status.textContent = "";
     try {
-      const { message_id } = await api(`/api/showcases/${encodeURIComponent(item.token)}/share`, { method: "POST" });
-      if (stillViewing()) tg.shareMessage(message_id);
+      const { message_id, bot_link } = await api(`/api/showcases/${encodeURIComponent(item.token)}/share`, { method: "POST" });
+      if (!stillViewing()) return;
+      if (bot_link) {
+        chat.href = bot_link;
+        chat.hidden = false;
+        status.textContent = "Коллаж со ссылкой уже в чате с Chizu. Его можно переслать оттуда.";
+      }
+      if (message_id && tg?.shareMessage && tg.isVersionAtLeast?.("8.0")) tg.shareMessage(message_id);
     } catch (error) {
-      if (stillViewing()) status.textContent = error.message || "Не удалось подготовить витрину. Попробуйте ещё раз.";
+      if (stillViewing() && chat.hidden) {
+        status.textContent = error.message || "Не удалось подготовить витрину. Попробуйте ещё раз.";
+      }
     } finally {
       button.disabled = false;
       button.textContent = "Поделиться";
