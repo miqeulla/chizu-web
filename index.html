@@ -435,6 +435,12 @@
           Забрать <svg class="button-sparkle" aria-hidden="true"><use href="#icon-star"></use></svg>
         </button>
       </article>
+      <a id="daily-channel-link" class="btn btn-secondary btn-block" target="_blank" rel="noopener" hidden>Подписаться на канал Chizu</a>
+      <aside id="chizu-announcement" class="economy-panel update-announcement" hidden>
+        <h2>Новости Chizu</h2>
+        <button id="dismiss-announcement" class="icon-btn" type="button" aria-label="Скрыть объявление">×</button>
+        <p id="announcement-text"></p>
+      </aside>
     </section>
 
     <section id="collection-page" class="page-view" hidden>
@@ -502,6 +508,8 @@
           <button id="collection-album-back" class="btn btn-secondary" type="button" hidden>К альбомам</button>
         </div>
         <p id="collection-album-status" class="hint" role="status"></p>
+        <button id="album-favorites-filter" class="btn btn-secondary" type="button" aria-pressed="false">Избранные альбомы</button>
+        <div id="album-reward" class="album-reward" hidden></div>
         <div id="collection-album-items" class="collection-list"></div>
         <div id="collection-album-pages" class="collection-pages" hidden>
           <button id="collection-album-prev" class="btn btn-secondary" type="button">Назад</button>
@@ -509,7 +517,7 @@
           <button id="collection-album-next" class="btn btn-secondary" type="button">Дальше</button>
         </div>
         <div id="collection-album-links" class="showcase-actions">
-          <button id="collection-favorites" class="btn btn-secondary" type="button">Избранное</button>
+          <button id="collection-favorites" class="btn btn-secondary" type="button">Избранные карты</button>
           <button id="collection-showcases" class="btn btn-secondary" type="button">Мои витрины</button>
         </div>
       </section>
@@ -715,7 +723,6 @@
       </div>
       <div id="frames-pane">
         <div class="frame-shop-toolbar">
-          <span id="frame-shop-balance">0 пыли</span>
           <button id="frame-shop-try" class="btn btn-secondary btn-block" type="button" disabled>
             Примерить рамки
           </button>
@@ -751,7 +758,6 @@
             </button>
           </div>
         </article>
-        <p id="case-balance-hint" class="hint"></p>
         <div id="case-loading-status" role="status"></div>
         <section class="economy-panel" aria-labelledby="case-contents-title">
           <h2 id="case-contents-title">Содержимое кейса</h2>
@@ -804,9 +810,18 @@
         <button id="background-reset" class="btn btn-secondary btn-block" type="button">Сбросить фон</button>
       </details>
       <details class="profile-favorites">
-        <summary class="profile-action">Избранные карты <span id="favorite-count">0 / 3</span></summary>
+        <summary class="profile-action">Избранные карты <span id="favorite-count">0 / 20</span></summary>
         <div id="favorite-cards" class="card-grid"></div>
       </details>
+      <section class="player-search-panel" aria-label="Поиск игроков">
+        <h2 class="section-label">Найти игрока</h2>
+        <div class="search-row">
+          <svg class="profile-search-icon" aria-hidden="true"><use href="#icon-search"></use></svg>
+          <input id="player-search" type="search" placeholder="Имя игрока"
+            aria-label="Поиск игроков по имени" autocomplete="off">
+        </div>
+        <div id="player-search-results" class="player-list"></div>
+      </section>
       <section class="referral-panel">
         <h2 class="section-label">Пригласить друга</h2>
         <p class="hint">Друг получит VIP на 3 дня, а вы — на 7 дней после его первой регистрации.</p>
@@ -822,6 +837,10 @@
         </div>
         <div id="referral-history" class="referral-history"></div>
       </section>
+      <div class="profile-support">
+        <a id="profile-channel-link" class="btn btn-secondary btn-block" target="_blank" rel="noopener" hidden>Канал обновлений</a>
+        <button id="bug-report-open" class="btn btn-secondary btn-block" type="button">Сообщить об ошибке</button>
+      </div>
       <div class="hidden-contract">
         <span id="card-count">0</span>
         <span id="extra-roll-count">0</span>
@@ -847,15 +866,6 @@
         <button id="notification-settings" class="btn btn-secondary btn-block" type="button"
           aria-haspopup="dialog">Уведомления Telegram</button>
       </div>
-      <section class="player-search-panel" aria-label="Поиск игроков">
-        <h2 class="section-label">Найти игрока</h2>
-        <div class="search-row">
-          <svg class="profile-search-icon" aria-hidden="true"><use href="#icon-search"></use></svg>
-          <input id="player-search" type="search" placeholder="Имя игрока"
-            aria-label="Поиск игроков по имени" autocomplete="off">
-        </div>
-        <div id="player-search-results" class="player-list"></div>
-      </section>
     </section>
 
     <section id="player-page" class="page-view" hidden>
@@ -870,7 +880,7 @@
           <div class="player-hero-text">
             <h2 id="player-name">Профиль игрока</h2>
             <p id="player-id" class="hint"></p>
-            <p id="player-vip" class="hint"></p>
+            <span id="player-vip" class="profile-tier-badge" hidden>✦ VIP</span>
           </div>
         </div>
         <p id="player-joined" class="hint player-joined"></p>
@@ -1069,6 +1079,34 @@
       <button id="frame-roulette-close" class="btn btn-primary btn-block" type="button" hidden>Продолжить</button>
     </div>
   </div>
+
+  <template id="bug-report-template">
+    <form class="bug-report-form">
+      <label>Что произошло?
+        <textarea class="field" name="description" required minlength="10" maxlength="1500" rows="5"></textarea>
+      </label>
+      <label>Когда возникла ошибка?
+        <input class="field" name="occurred_at" type="datetime-local" required>
+      </label>
+      <label>Где возникла ошибка?
+        <select class="field" name="location">
+          <option value="home">Главная и призыв</option>
+          <option value="collection">Коллекция и инвентарь</option>
+          <option value="trade">Маркет и обмен</option>
+          <option value="shop">Магазин</option>
+          <option value="account">Мой профиль</option>
+          <option value="player">Профиль другого игрока</option>
+          <option value="showcases">Витрины</option>
+        </select>
+      </label>
+      <label>Скриншот (необязательно)
+        <input class="field" name="screenshot" type="file" accept="image/png,image/jpeg,image/webp">
+      </label>
+      <p class="hint">К обращению добавятся ваш Telegram ID, версия игры, устройство и экран.</p>
+      <button class="btn btn-primary btn-block" type="submit">Отправить</button>
+      <p class="hint" role="status"></p>
+    </form>
+  </template>
 
   <div id="shop-dialog" class="shop-dialog" role="dialog" aria-modal="true" aria-labelledby="shop-dialog-title" aria-describedby="shop-dialog-description" hidden>
     <div id="shop-dialog-backdrop" class="shop-dialog-backdrop"></div>
