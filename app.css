@@ -5655,12 +5655,3 @@ body:has(#home-page:not([hidden])) .drop-actions .btn-primary, #drop-to-results 
 #daily-channel-link:not([hidden]) { margin-top: 8px; }
 :is(#daily-channel-link, #profile-channel-link)[hidden] { display: none; }
 :is(#daily-channel-link, #profile-channel-link) { text-decoration: none; }
-.update-announcement:not([hidden]) {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 6px;
-  margin-top: 12px;
-  text-align: start;
-}
-.update-announcement p { grid-column: 1 / -1; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }

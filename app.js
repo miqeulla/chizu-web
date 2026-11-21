@@ -4506,10 +4506,6 @@
       if (url) link.href = url;
       else link.removeAttribute("href");
     }
-    const announcement = profile?.update_announcement;
-    const banner = el("chizu-announcement");
-    banner.hidden = !announcement || playerPreference("dismissed-announcement") === announcement.revision;
-    el("announcement-text").textContent = announcement?.body || "";
   }
 
   function bugReportLocation() {
@@ -5144,11 +5140,6 @@
       tg.openTelegramLink(event.currentTarget.href);
     });
   }
-  el("dismiss-announcement").addEventListener("click", () => {
-    const revision = state.profile?.update_announcement?.revision;
-    if (revision) playerPreference("dismissed-announcement", revision);
-    el("chizu-announcement").hidden = true;
-  });
   el("bug-report-open").addEventListener("click", openBugReport);
   el("referral-copy").addEventListener("click", async () => {
     try {
