@@ -736,15 +736,18 @@
     if (!effect || (!motionUrl && !/^[a-z_]+$/.test(effect))) return null;
     const fx = document.createElement("span");
     fx.setAttribute("aria-hidden", "true");
-    if (cardRarity === "legendary" || cardRarity === "mythical") {
-      fx.style.inset = portraitLayout ? "2.88% 4.20%" : "2.83% 4.13%";
+    if (!portraitLayout && (cardRarity === "legendary" || cardRarity === "mythical")) {
+      fx.style.inset = "2.83% 4.13%";
     }
     if (portraitLayout) {
-      const [left, top, right, bottom] = portraitLayout.target;
       const x = (value) => `${value / 4}%`;
       const y = (value) => `${value / 6}%`;
-      fx.style.clipPath = `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0,
-        ${x(left)} ${y(top)}, ${x(left)} ${y(bottom)}, ${x(right)} ${y(bottom)}, ${x(right)} ${y(top)}, ${x(left)} ${y(top)})`;
+      const art = portraitLayout.target;
+      const labels = (portraitLayout.labels || []).map(([left, top, right, bottom]) =>
+        [left, top, right + 1, bottom + 1]);
+      const holes = [art, ...labels].map(([left, top, right, bottom]) =>
+        `${x(left)} ${y(top)}, ${x(left)} ${y(bottom)}, ${x(right)} ${y(bottom)}, ${x(right)} ${y(top)}, ${x(left)} ${y(top)}`);
+      fx.style.clipPath = `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${holes.join(", 0 0, ")})`;
     }
     if (motionUrl) {
       fx.className = "frame-live-fx frame-live-fx--motion";

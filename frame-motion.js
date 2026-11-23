@@ -227,6 +227,12 @@ function renderFrame(context, image, id, seconds, badgeBox, portraitLayout, stag
     animations[id](layer, position, image);
     if (stage) fitFrameLayer(context, stage.canvas, portraitLayout);
     // The card renderer already drew these labels over the static frame.
+    if (portraitLayout?.labels) {
+        for (const [left, top, right, bottom] of portraitLayout.labels) {
+            context.clearRect(left, top, right - left + 1, bottom - top + 1);
+        }
+        return;
+    }
     if (badgeBox) {
         const [left, top, right, bottom] = badgeBox;
         context.clearRect(left, top, right - left + 1, bottom - top + 1);
