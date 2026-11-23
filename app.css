@@ -4365,6 +4365,8 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 .frame-shop-visual[hidden] { display: none; }
 .frame-shop-visual #frame-shop-image { display: block; width: 100%; height: auto; }
 .frame-live-fx { position: absolute; inset: 0; z-index: 1; border-radius: inherit; overflow: hidden; pointer-events: none; --fx-color: #75e8ff; }
+.frame-live-fx--motion::before, .frame-live-fx--motion::after { display: none; }
+.frame-live-fx--motion canvas { display: block; width: 100%; height: 100%; }
 .frame-live-fx::before {
   content: ""; position: absolute; inset: 0; padding: 5px; border-radius: inherit;
   background: conic-gradient(from 0deg, transparent, var(--fx-color), transparent 35%, var(--fx-color), transparent 80%);
@@ -4639,6 +4641,35 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 .frame-live-fx[data-theme="astral"] .frame-fx-corner > img { animation-name:astral-astrolabe;animation-duration:16s;animation-timing-function:linear; }
 .frame-live-fx[data-theme="forest"] .frame-fx-corner > img { animation-name:forest-branch-wind;animation-duration:7s; }
 .frame-live-fx[data-theme="gothic"] .frame-fx-corner > img { animation-name:gothic-window-light;animation-duration:5.9s; }
+.frame-live-fx:is([data-theme="last_train"], [data-theme="porcelain_teahouse"], [data-theme="midnight_grimoire"]) .frame-fx-corner > img {
+  animation-name: frame-ornament-reflection; animation-duration: 3.8s;
+}
+.frame-live-fx:is([data-theme="pudding_parade"], [data-theme="plush_dreams"], [data-theme="frog_post"], [data-theme="manga_club"]) .frame-fx-corner > img {
+  animation-name: frame-ornament-bounce; animation-duration: 2.8s;
+}
+.frame-live-fx:is([data-theme="miracle_transformation"], [data-theme="watercolor_wind"], [data-theme="mist_fox_spirits"]) .frame-fx-corner > img {
+  animation-name: frame-ornament-drift; animation-duration: 4.6s;
+}
+.frame-live-fx[data-theme="matsuri_night"] .frame-fx-corner > img { animation-name: frame-ornament-lantern; animation-duration: 3.2s; }
+.frame-live-fx[data-theme="threads_of_fate"] .frame-fx-corner > img { animation-name: frame-ornament-reflection; animation-duration: 2.4s; }
+@keyframes frame-ornament-reflection {
+  0%, 48% { filter: brightness(.95); }
+  80% { filter: brightness(1.4) drop-shadow(0 0 4px var(--fx-color)); }
+  100% { filter: brightness(1.02); }
+}
+@keyframes frame-ornament-bounce {
+  0%, 60% { transform: scale(1); }
+  78% { transform: translateY(-2px) scale(.97, 1.04); }
+  100% { transform: translateY(1px) scale(1.04, .98); }
+}
+@keyframes frame-ornament-drift {
+  from { transform: rotate(-3deg) translateY(1px); }
+  to { transform: rotate(4deg) translateY(-2px); }
+}
+@keyframes frame-ornament-lantern {
+  from { transform: rotate(-3deg); filter: brightness(.9); }
+  to { transform: rotate(3deg); filter: brightness(1.2) drop-shadow(0 0 3px var(--fx-color)); }
+}
 @keyframes moon-silver { from{opacity:.35} to{opacity:.9} }
 @keyframes moon-petals { from{transform:translate(1px,-5px) rotate(-1deg);opacity:.3} to{transform:translate(-1px,6px) rotate(1deg);opacity:1} }
 @keyframes neon-scan { from{background-position:0 0} to{background-position:0 100%} }

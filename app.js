@@ -729,18 +729,26 @@
     return svg;
   }
 
-  function frameEffects(effect, cardRarity = "epic", frameRarity = "epic", accent, ornamentUrl, theme) {
-    if (!["pulse", "petals", "shimmer", "radiance", "moon_garden", "neon", "ice_prism",
-      "imperial", "phoenix", "ocean", "astral", "forest", "gothic", "cinnabar", "porcelain", "clockwork", "opal"].includes(effect)) return null;
+  function frameEffects(effect, cardRarity = "epic", frameRarity = "epic", accent, ornamentUrl, theme, motionUrl) {
+    if (!effect || (!motionUrl && !/^[a-z_]+$/.test(effect))) return null;
     const fx = document.createElement("span");
-    const premium = frameRarity === "legendary" || frameRarity === "mythical";
-    fx.className = `frame-live-fx frame-live-fx--${effect} frame-live-fx--tier-${premium ? "ssr" : frameRarity === "epic" ? "sr" : "r"}`;
-    fx.dataset.theme = theme || "";
-    if (accent) fx.style.setProperty("--fx-color", accent);
     fx.setAttribute("aria-hidden", "true");
     if (cardRarity === "legendary" || cardRarity === "mythical") {
       fx.style.inset = "2.83% 4.13%";
     }
+    if (motionUrl) {
+      fx.className = "frame-live-fx frame-live-fx--motion";
+      const moduleUrl = new URL("frame-motion.js", staticBase);
+      if (appVersion) moduleUrl.searchParams.set("v", appVersion);
+      import(moduleUrl.href)
+        .then(({ mountFrameMotion }) => mountFrameMotion(fx, effect, frameAssetUrl(motionUrl)))
+        .catch(() => fx.remove());
+      return fx;
+    }
+    const premium = frameRarity === "legendary" || frameRarity === "mythical";
+    fx.className = `frame-live-fx frame-live-fx--${effect} frame-live-fx--tier-${premium ? "ssr" : frameRarity === "epic" ? "sr" : "r"}`;
+    fx.dataset.theme = theme || "";
+    if (accent) fx.style.setProperty("--fx-color", accent);
     if (premium && ornamentUrl) {
       for (let corner = 0; corner < 4; corner += 1) {
         const mount = document.createElement("span");
@@ -826,14 +834,14 @@
     state.imageUrls.set(cacheKey, url);
   }
 
-  function loadCardImageUrl(card, tradeToken = "", frameStyle = card.frame_style) {
-    const cacheKey = `${card.id}:${frameStyle || "legacy"}:${card.upgrade_level || 0}:${tradeToken || ""}`;
+  function loadCardImageUrl(card, tradeToken = "", frameStyle = card.frame_style, liveFrame = true) {
+    const cacheKey = `${card.id}:${frameStyle || "legacy"}:${card.upgrade_level || 0}:${tradeToken || ""}:${Number(liveFrame)}`;
     const cachedUrl = state.imageUrls.get(cacheKey);
     if (cachedUrl) return Promise.resolve(cachedUrl);
     let imagePromise = state.imagePromises.get(cacheKey);
     if (imagePromise) return imagePromise;
     const imageQuery = new URLSearchParams();
-    imageQuery.set("live_frame", "1");
+    if (liveFrame) imageQuery.set("live_frame", "1");
     imageQuery.set("upgrade", card.upgrade_level || 0);
     if (appVersion) imageQuery.set("v", appVersion);
     if (tradeToken) imageQuery.set("trade", tradeToken);
@@ -853,7 +861,7 @@
     return imagePromise;
   }
 
-  function cardButton(card, selected, disabled, onClick, tradeToken = state.tradeToken, previousImageUrl) {
+  function cardButton(card, selected, disabled, onClick, tradeToken = state.tradeToken, previousImageUrl, inspect = false) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = `card ${selected ? "selected" : ""} ${disabled && card.lock_reason ? "locked" : ""} ${rarityClass(card.rarity)}`;
@@ -876,7 +884,7 @@
     const effects = cardEffects(card.rarity);
     if (effects) button.append(effects);
     const frameFx = frameEffects(card.frame_effect, card.rarity, card.frame_rarity,
-      card.frame_accent, card.frame_ornament_url, card.frame_theme);
+      card.frame_accent, card.frame_ornament_url, card.frame_theme, inspect ? card.frame_motion_url : null);
     if (frameFx) button.append(frameFx);
     const marks = document.createElement("span");
     marks.className = "card-marks";
@@ -976,7 +984,7 @@
         resetTilt(event);
       }
     });
-    loadCardImageUrl(card, tradeToken).then((url) => {
+    loadCardImageUrl(card, tradeToken, card.frame_style, inspect || !card.frame_motion_url).then((url) => {
       image.src = url;
     }).catch(showError);
     return button;
@@ -2235,7 +2243,7 @@
   }
 
   function renderCardInspection(card, previousImageUrl) {
-    const preview = cardButton(card, false, false, null, "", previousImageUrl);
+    const preview = cardButton(card, false, false, null, "", previousImageUrl, true);
     preview.classList.add("sheet-card");
     preview.tabIndex = -1;
     preview.setAttribute("aria-disabled", "true");
@@ -2647,7 +2655,7 @@
         image.src = url;
         image.alt = `${card.name} · ${frame.title}`;
         visual.append(image);
-        const fx = frameEffects(frame.effect, card.rarity, frame.rarity, frame.accent, frame.ornament_url, frame.style);
+        const fx = frameEffects(frame.effect, card.rarity, frame.rarity, frame.accent, frame.ornament_url, frame.style, frame.motion_url);
         if (fx) visual.append(fx);
         status.textContent = current ? `Сейчас на карте: ${frame.title}` : `Примерка: ${frame.title}`;
       } catch {
@@ -3859,7 +3867,7 @@
       visual.hidden = false;
       const frame = framePreviewOptions.find((item) => item.id === state.frameShopFrameId);
       image.dataset.cardRarity = card.rarity;
-      const fx = frameEffects(frame?.effect, card.rarity, frame?.rarity, frame?.accent, frame?.ornament_url, frame?.style);
+      const fx = frameEffects(frame?.effect, card.rarity, frame?.rarity, frame?.accent, frame?.ornament_url, frame?.style, frame?.motion_url);
       if (fx) visual.append(fx);
       status.textContent = frame
         ? `Примерка: ${frame.title}${frame.id === card.frame_style ? " · На этой карте"
@@ -3930,7 +3938,7 @@
     image.decoding = "async";
     visual.append(image);
     if (frame) {
-      const effect = frameEffects(frame.effect, frame.rarity, frame.rarity, frame.accent, frame.ornament_url, frame.style);
+      const effect = frameEffects(frame.effect, frame.rarity, frame.rarity, frame.accent, frame.ornament_url, frame.style, frame.motion_url);
       if (effect) visual.append(effect);
     }
     return visual;
@@ -4046,7 +4054,7 @@
       const legacyDuplicate = result.duplicate && !result.frame_copies_awarded;
       const fx = result.frame_id && !legacyDuplicate
         ? frameEffects(result.frame_effect, result.frame_rarity, result.frame_rarity,
-          result.frame_accent, result.frame_ornament_url, result.frame_theme)
+          result.frame_accent, result.frame_ornament_url, result.frame_theme, result.frame_motion_url)
         : null;
       revealRouletteAward(caseRewardSummary(result),
         casePrizeImage(legacyDuplicate ? "dust" : result.reward, legacyDuplicate ? null : result.frame_preview_url), fx,
