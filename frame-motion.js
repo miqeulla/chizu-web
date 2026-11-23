@@ -111,7 +111,6 @@ function drawShard(context, image, shard, position) {
     context.save();
     context.translate(x, y);
     context.rotate(Math.sin(angle) * 0.22);
-    context.scale(0.52 + 0.48 * Math.abs(Math.cos(angle)), 1);
     context.translate(-shard.x, -shard.y);
     shardPath(context, shard);
     context.clip();
@@ -201,31 +200,14 @@ const animations = {
     "titan-heart": animateTitan,
 };
 
-function fitFrameLayer(context, layer, { source, target }) {
-    const [left, top, right, bottom] = source;
-    const [targetLeft, targetTop, targetRight, targetBottom] = target;
-    const sourceX = [0, left, right, frameWidth];
-    const sourceY = [0, top, bottom, frameHeight];
-    const targetX = [0, targetLeft, targetRight, frameWidth];
-    const targetY = [0, targetTop, targetBottom, frameHeight];
-    context.clearRect(0, 0, frameWidth, frameHeight);
-    for (let row = 0; row < 3; row += 1) {
-        for (let col = 0; col < 3; col += 1) {
-            if (row === 1 && col === 1) continue;
-            context.drawImage(layer,
-                sourceX[col], sourceY[row], sourceX[col + 1] - sourceX[col], sourceY[row + 1] - sourceY[row],
-                targetX[col], targetY[row], targetX[col + 1] - targetX[col], targetY[row + 1] - targetY[row]);
-        }
-    }
-}
-
-function renderFrame(context, image, id, seconds, badgeBox, portraitLayout, stage) {
+function renderFrame(context, image, id, seconds, badgeBox, portraitLayout) {
     const position = (seconds % loopDuration) / loopDuration;
-    const layer = stage || context;
-    layer.clearRect(0, 0, frameWidth, frameHeight);
-    layer.drawImage(image, 0, 0, frameWidth, frameHeight);
-    animations[id](layer, position, image);
-    if (stage) fitFrameLayer(context, stage.canvas, portraitLayout);
+    context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+    context.save();
+    context.translate(...(portraitLayout?.offset ?? [0, 0]));
+    context.drawImage(image, 0, 0, frameWidth, frameHeight);
+    animations[id](context, position, image);
+    context.restore();
     // The card renderer already drew these labels over the static frame.
     if (portraitLayout?.labels) {
         for (const [left, top, right, bottom] of portraitLayout.labels) {
@@ -239,14 +221,9 @@ function renderFrame(context, image, id, seconds, badgeBox, portraitLayout, stag
     } else {
         context.clearRect(68, 0, 264, 59);
     }
-    if (portraitLayout) {
-        context.clearRect(38, portraitLayout.target[3] + 1, 325, 45);
-        context.clearRect(165, 587, 70, 13);
-    } else {
-        if (id === "titan-heart") context.clearRect(62, 450, 276, 45);
-        else context.clearRect(38, 484, 324, 86);
-        context.clearRect(165, 577, 70, 23);
-    }
+    if (id === "titan-heart") context.clearRect(62, 450, 276, 45);
+    else context.clearRect(38, 484, 324, 86);
+    context.clearRect(165, 577, 70, 23);
 }
 
 const images = new Map();
@@ -275,8 +252,8 @@ function tick(time) {
                 visible.delete(canvas);
                 continue;
             }
-            const { context, image, id, badgeBox, portraitLayout, stage } = canvases.get(canvas);
-            renderFrame(context, image, id, time / 1000, badgeBox, portraitLayout, stage);
+            const { context, image, id, badgeBox, portraitLayout } = canvases.get(canvas);
+            renderFrame(context, image, id, time / 1000, badgeBox, portraitLayout);
         }
     }
     syncAnimation();
@@ -310,20 +287,11 @@ export async function mountFrameMotion(container, id, url, badgeBox, portraitLay
     const image = await images.get(url);
     if (!container.isConnected) return;
     const canvas = document.createElement("canvas");
-    canvas.width = frameWidth;
-    canvas.height = frameHeight;
+    [canvas.width, canvas.height] = portraitLayout?.size ?? [frameWidth, frameHeight];
     const context = canvas.getContext("2d");
     if (!context) return;
-    let stage;
-    if (portraitLayout) {
-        const source = document.createElement("canvas");
-        source.width = frameWidth;
-        source.height = frameHeight;
-        stage = source.getContext("2d");
-        if (!stage) return;
-    }
-    canvases.set(canvas, { context, image, id, badgeBox, portraitLayout, stage });
-    renderFrame(context, image, id, 0, badgeBox, portraitLayout, stage);
+    canvases.set(canvas, { context, image, id, badgeBox, portraitLayout });
+    renderFrame(context, image, id, 0, badgeBox, portraitLayout);
     container.append(canvas);
     observer.observe(canvas);
 }

@@ -4364,18 +4364,25 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 .frame-shop-visual { position: relative; justify-self: center; width: min(100%, 240px, 33dvh); overflow: hidden; border-radius: 12px; }
 .frame-shop-visual[hidden] { display: none; }
 .frame-shop-visual #frame-shop-image { display: block; width: 100%; height: auto; }
-.frame-live-fx { position: absolute; inset: 0; z-index: 1; border-radius: inherit; overflow: hidden; pointer-events: none; --fx-color: #75e8ff; }
+.frame-live-fx {
+  position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none;
+  --fx-color: #75e8ff; --frame-x: 0%; --frame-y: 0%; --frame-corner-size: 24%;
+}
 .frame-live-fx--motion::before, .frame-live-fx--motion::after { display: none; }
 .frame-live-fx--motion canvas { display: block; width: 100%; height: 100%; }
 .frame-live-fx::before {
-  content: ""; position: absolute; inset: 0; padding: 5px; border-radius: inherit;
+  --frame-stroke: 5px;
+  content: ""; position: absolute; inset: 0; border-radius: 8px;
   background: conic-gradient(from 0deg, transparent, var(--fx-color), transparent 35%, var(--fx-color), transparent 80%);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor; mask-composite: exclude;
+  mask: var(--frame-image, linear-gradient(#fff 0 0)) center / 100% 100% no-repeat,
+    linear-gradient(#fff 0 0) center / calc(100% - 2 * (var(--frame-x) + var(--frame-stroke)))
+      calc(100% - 2 * (var(--frame-y) + var(--frame-stroke))) no-repeat,
+    linear-gradient(#fff 0 0) center / calc(100% - 2 * var(--frame-x)) calc(100% - 2 * var(--frame-y)) no-repeat;
+  mask-composite: intersect, exclude;
   opacity: .7; animation: frame-edge-pulse 3s ease-in-out infinite alternate paused;
 }
 .frame-live-fx::after {
-  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  content: ""; position: absolute; inset: var(--frame-y) var(--frame-x);
   background: radial-gradient(ellipse at 5% 18%, #fff 0 1px, var(--fx-color) 2px, transparent 5px),
     radial-gradient(ellipse at 95% 36%, #fff 0 1px, var(--fx-color) 2px, transparent 4px),
     radial-gradient(ellipse at 5% 63%, var(--fx-color) 0 2px, transparent 5px),
@@ -4401,13 +4408,13 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 .page-hidden .frame-live-fx::before, .page-hidden .frame-live-fx::after { animation-play-state: paused !important; }
 @keyframes frame-edge-pulse { from { opacity: .3; } to { opacity: 1; } }
 
-/* Frame rarity controls energy; card rarity only controls glow-padding alignment. */
+/* Frame rarity controls the intensity of its effects. */
 @property --frame-energy-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 .frame-live-fx--tier-r::before, .frame-live-fx--tier-r::after { opacity: .28; }
-.frame-live-fx--tier-sr::before { padding: 1.6%; opacity: .8; }
+.frame-live-fx--tier-sr::before { --frame-stroke: 1.6%; opacity: .8; }
 .frame-live-fx--tier-sr::after { filter: drop-shadow(0 0 2px var(--fx-color)); }
 .frame-live-fx--tier-ssr::before {
-  padding: 3%; opacity: 1;
+  --frame-stroke: 3%; opacity: 1;
   background: conic-gradient(from var(--frame-energy-angle), transparent 0deg 45deg,
     var(--fx-color) 66deg, #fff5ed 82deg, transparent 108deg 220deg,
     var(--fx-color) 250deg, #fff 270deg, transparent 300deg);
@@ -4424,15 +4431,14 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
     radial-gradient(ellipse at 7% 93%, #fff 0 1px, var(--fx-color) 3px, transparent 13px);
   animation-duration: 1.9s; filter: drop-shadow(0 0 5px var(--fx-color));
 }
-.frame-fx-corner { position: absolute; width: 24%; aspect-ratio: 1; top: 0; left: 0; }
-.frame-fx-corner:nth-child(2) { left: auto; right: 0; }
-.frame-fx-corner:nth-child(3) { top: auto; bottom: 0; clip-path: polygon(0 0,39.5% 0,39.5% 68%,100% 68%,100% 100%,0 100%); }
-.frame-fx-corner:nth-child(4) { top: auto; bottom: 0; left: auto; right: 0; clip-path: polygon(60.5% 0,100% 0,100% 100%,0 100%,0 68%,60.5% 68%); }
+.frame-fx-corner { position: absolute; width: var(--frame-corner-size); aspect-ratio: 1; top: var(--frame-y); left: var(--frame-x); }
+.frame-fx-corner:nth-child(even) { left: auto; right: var(--frame-x); }
+.frame-fx-corner:nth-child(n+3) { top: auto; bottom: var(--frame-y); }
 .frame-live-fx .frame-fx-corner > img {
   display: block; width: 100%; height: 100%; max-width: none; object-fit: contain;
   border-radius: 0; transform-origin: var(--ornament-origin, 25% 25%); background: transparent; aspect-ratio: 1;
   animation: frame-ornament-wing 3.1s ease-in-out infinite alternate paused;
-  filter: drop-shadow(0 0 3px var(--fx-color));
+  opacity: .48; mix-blend-mode: screen; filter: drop-shadow(0 0 3px var(--fx-color));
 }
 .frame-fx-corner:nth-child(even) > img { animation-delay: -.9s; }
 .frame-live-fx--cinnabar::after {
@@ -5102,9 +5108,6 @@ body:has(#home-page:not([hidden])) .drop-actions .btn-primary, #drop-to-results 
     width: calc((100% - 9px) / 2);
     justify-self: center;
   }
-}
-#frame-shop-image:is([data-card-rarity="legendary"], [data-card-rarity="mythical"]) {
-  clip-path: inset(2.83% 4.13% round 7px);
 }
 .frame-pack-actions .btn { flex: 1 1 0; min-width: 0; gap: 5px; padding-inline: 6px; font-variant-numeric: tabular-nums; }
 .frame-pack-open .currency-icon { width: 20px; height: 20px; background: var(--currency-art) center / contain no-repeat; }

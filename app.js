@@ -729,24 +729,23 @@
     return svg;
   }
 
-  function frameEffects(frame, cardRarity = frame?.rarity) {
+  function frameEffects(frame, art) {
     if (!frame) return null;
     const { effect, rarity: frameRarity, accent, ornament_url: ornamentUrl, style: theme,
       motion_url: motionUrl, rarity_badge_box: badgeBox, portrait_layout: portraitLayout } = frame;
     if (!effect || (!motionUrl && !/^[a-z_]+$/.test(effect))) return null;
     const fx = document.createElement("span");
     fx.setAttribute("aria-hidden", "true");
-    if (!portraitLayout && (cardRarity === "legendary" || cardRarity === "mythical")) {
-      fx.style.inset = "2.83% 4.13%";
-    }
-    if (portraitLayout) {
-      const x = (value) => `${value / 4}%`;
-      const y = (value) => `${value / 6}%`;
-      const art = portraitLayout.target;
-      const labels = (portraitLayout.labels || []).map(([left, top, right, bottom]) =>
-        [left, top, right + 1, bottom + 1]);
-      const holes = [art, ...labels].map(([left, top, right, bottom]) =>
-        `${x(left)} ${y(top)}, ${x(left)} ${y(bottom)}, ${x(right)} ${y(bottom)}, ${x(right)} ${y(top)}, ${x(left)} ${y(top)}`);
+    if (portraitLayout?.size) {
+      const [width, height] = portraitLayout.size;
+      const [offsetX, offsetY] = portraitLayout.offset;
+      const x = (value) => `${100 * value / width}%`;
+      const y = (value) => `${100 * value / height}%`;
+      fx.style.setProperty("--frame-x", x(offsetX));
+      fx.style.setProperty("--frame-y", y(offsetY));
+      fx.style.setProperty("--frame-corner-size", x(portraitLayout.corner_size));
+      const holes = portraitLayout.labels.map(([left, top, right, bottom]) =>
+        `${x(left)} ${y(top)}, ${x(left)} ${y(bottom + 1)}, ${x(right + 1)} ${y(bottom + 1)}, ${x(right + 1)} ${y(top)}, ${x(left)} ${y(top)}`);
       fx.style.clipPath = `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${holes.join(", 0 0, ")})`;
     }
     if (motionUrl) {
@@ -762,6 +761,15 @@
     fx.className = `frame-live-fx frame-live-fx--${effect} frame-live-fx--tier-${premium ? "ssr" : frameRarity === "epic" ? "sr" : "r"}`;
     fx.dataset.theme = theme || "";
     if (accent) fx.style.setProperty("--fx-color", accent);
+    if (typeof art === "string") {
+      fx.style.setProperty("--frame-image", `url("${art}")`);
+    } else if (art) {
+      const updateSilhouette = () => {
+        if (art.naturalWidth) fx.style.setProperty("--frame-image", `url("${art.src}")`);
+      };
+      updateSilhouette();
+      art.addEventListener("load", updateSilhouette, { once: true });
+    }
     if (premium && ornamentUrl) {
       for (let corner = 0; corner < 4; corner += 1) {
         const mount = document.createElement("span");
@@ -853,7 +861,7 @@
     if (cachedUrl) return Promise.resolve(cachedUrl);
     let imagePromise = state.imagePromises.get(cacheKey);
     if (imagePromise) return imagePromise;
-    const imageQuery = new URLSearchParams();
+    const imageQuery = new URLSearchParams({ alpha: "1" });
     if (liveFrame) imageQuery.set("live_frame", "1");
     imageQuery.set("upgrade", card.upgrade_level || 0);
     if (appVersion) imageQuery.set("v", appVersion);
@@ -901,7 +909,7 @@
       ornament_url: card.frame_ornament_url, style: card.frame_theme,
       motion_url: inspect ? card.frame_motion_url : null, rarity_badge_box: card.frame_rarity_badge_box,
       portrait_layout: card.frame_portrait_layout,
-    }, card.rarity);
+    }, image);
     if (frameFx) button.append(frameFx);
     const marks = document.createElement("span");
     marks.className = "card-marks";
@@ -2672,7 +2680,7 @@
         image.src = url;
         image.alt = `${card.name} · ${frame.title}`;
         visual.append(image);
-        const fx = frameEffects(frame, card.rarity);
+        const fx = frameEffects(frame, image);
         if (fx) visual.append(fx);
         status.textContent = current ? `Сейчас на карте: ${frame.title}` : `Примерка: ${frame.title}`;
       } catch {
@@ -3883,8 +3891,7 @@
       image.hidden = false;
       visual.hidden = false;
       const frame = framePreviewOptions.find((item) => item.id === state.frameShopFrameId);
-      image.dataset.cardRarity = card.rarity;
-      const fx = frameEffects(frame, card.rarity);
+      const fx = frameEffects(frame, image);
       if (fx) visual.append(fx);
       status.textContent = frame
         ? `Примерка: ${frame.title}${frame.id === card.frame_style ? " · На этой карте"
@@ -3955,7 +3962,7 @@
     image.decoding = "async";
     visual.append(image);
     if (frame) {
-      const effect = frameEffects(frame);
+      const effect = frameEffects(frame, image);
       if (effect) visual.append(effect);
     }
     return visual;
@@ -4069,17 +4076,16 @@
       state.caseOpening = false;
       updateCaseButton();
       const legacyDuplicate = result.duplicate && !result.frame_copies_awarded;
+      const imageUrl = casePrizeImage(legacyDuplicate ? "dust" : result.reward, legacyDuplicate ? null : result.frame_preview_url);
       const fx = result.frame_id && !legacyDuplicate
         ? frameEffects({
           effect: result.frame_effect, rarity: result.frame_rarity, accent: result.frame_accent,
           ornament_url: result.frame_ornament_url, style: result.frame_theme,
           motion_url: result.frame_motion_url, rarity_badge_box: result.frame_rarity_badge_box,
           portrait_layout: result.frame_portrait_layout,
-        })
+        }, imageUrl)
         : null;
-      revealRouletteAward(caseRewardSummary(result),
-        casePrizeImage(legacyDuplicate ? "dust" : result.reward, legacyDuplicate ? null : result.frame_preview_url), fx,
-        legacyDuplicate || !result.frame_id);
+      revealRouletteAward(caseRewardSummary(result), imageUrl, fx, legacyDuplicate || !result.frame_id);
     }
   }
 
@@ -4295,12 +4301,13 @@
       try { await animateRoulette(pack.items.map(prize), prize(result.frame)); }
       catch (_error) { /* Reveal the server result even if motion is unavailable. */ }
       finally {
-        const fx = frameEffects(result.frame);
+        const imageUrl = frameAssetUrl(result.frame.live_preview_url || result.frame.preview_url);
+        const fx = frameEffects(result.frame, imageUrl);
         const summary = result.duplicate
           ? (result.compensation_dust ? `Дубликат «${result.frame.title}» · ${result.compensation_dust} пыли.`
             : `Получена ещё одна рамка «${result.frame.title}»!`)
           : `Получена рамка «${result.frame.title}»!`;
-        revealRouletteAward(summary, frameAssetUrl(result.frame.live_preview_url || result.frame.preview_url), fx);
+        revealRouletteAward(summary, imageUrl, fx);
       }
     } catch (error) { showError(error); }
     finally { state.packOpening = false; renderFrameShop(); }
