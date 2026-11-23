@@ -812,8 +812,8 @@
         <h2 class="section-label">Найти игрока</h2>
         <div class="search-row">
           <svg class="profile-search-icon" aria-hidden="true"><use href="#icon-search"></use></svg>
-          <input id="player-search" type="search" placeholder="Имя игрока"
-            aria-label="Поиск игроков по имени" autocomplete="off">
+          <input id="player-search" type="search" placeholder="Имя или @username"
+            aria-label="Поиск игроков по имени или юзернейму Telegram" autocomplete="off">
         </div>
         <div id="player-search-results" class="player-list"></div>
       </section>
@@ -1027,27 +1027,13 @@
       <button id="drop-skip" class="drop-skip" type="button">Пропустить ✦</button>
       <h2 id="drop-title" class="drop-title" tabindex="-1">Открываем карту…</h2>
       <div id="drop-rarity" class="drop-rarity" aria-live="polite"></div>
-      <div class="drop-portal" aria-hidden="true">
-        <div class="drop-light"></div>
-        <div class="drop-summon">
-          <span class="drop-summon-rays"></span>
-          <span class="drop-summon-ring"></span>
-          <span class="drop-summon-core"></span>
-        </div>
-        <span class="drop-beam"></span>
+      <div id="drop-portal" class="drop-portal" aria-hidden="true">
         <div class="drop-aura" aria-hidden="true"></div>
-        <div class="drop-reveal-rays">
-          <span></span><span></span><span></span><span></span><span></span>
-        </div>
-        <div class="drop-ur-impact"></div>
         <div class="drop-card-turn">
           <div class="drop-card-back"><img id="drop-card-cover" class="drop-card-emblem" data-static-src="summon-card-back.webp" data-static-fallback="summon-card-back.png" alt="" aria-hidden="true" decoding="async"></div>
           <div id="drop-revealed-card" class="drop-revealed-card"></div>
         </div>
-        <div class="drop-burst"></div>
-        <div class="drop-shockwave"></div>
-        <div class="drop-flash"></div>
-        <div id="drop-particles" class="drop-particles"></div>
+        <div class="drop-reveal-fx" aria-hidden="true"><span class="drop-reveal-trail"></span></div>
       </div>
       <div id="drop-sequence" class="drop-sequence" aria-hidden="true" hidden></div>
       <div id="drop-results" class="drop-results" aria-label="Полученные карты" hidden></div>

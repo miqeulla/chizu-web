@@ -8,7 +8,7 @@
     return;
   }
   const DROP_COOLDOWN_SEC = 3600;
-  const DROP_MIN_OPEN_MS = 1200;
+  const DROP_MIN_OPEN_MS = 380;
   const RARITIES = [
     { key: "", title: "Все" },
     { key: "common", title: "N · Common" },
@@ -89,6 +89,7 @@
   const pagePositions = new Map();
   const loadedCollectionModes = new Set();
   let sheetBack = null;
+  let sheetReturnFocus = null;
   let detailAnchor = null;
   const playerPreference = (name, value) => {
     const id = state.profile?.id;
@@ -1071,17 +1072,20 @@
     clearTimeout(state.dropTimer);
     const stock = state.profile.free_drops;
     const seconds = Math.max(0, Math.ceil((state.dropReadyAt - Date.now()) / 1000));
+    const firstReady = !state.profile.has_summoned && stock.available > 0;
+    const timer = el("drop-timer");
+    updateDropButton();
     if (!seconds && stock.next_in != null) {
-      el("drop-timer").textContent = "Обновляем запас…";
+      if (!firstReady) timer.textContent = "Обновляем запас…";
       loadProfile().catch(showDropLoadError);
       return;
     }
-    const timer = el("drop-timer");
     const ring = el("drop-ring");
-    timer.textContent = stock.next_in == null ? "Запас полон" : `Следующее через ${formatDuration(seconds)}`;
+    timer.textContent = stock.next_in == null ? "Запас полон"
+      : firstReady ? "Первое открытие доступно"
+      : `Пополнение через ${formatDuration(seconds)}`;
     const cooldown = state.profile.drop_cooldown_duration || DROP_COOLDOWN_SEC;
     ring.style.setProperty("--progress", String(Math.max(0, Math.min(1, 1 - seconds / cooldown))));
-    updateDropButton();
     if (seconds > 0) state.dropTimer = window.setTimeout(updateDropTimer, 1000);
   }
 
@@ -1198,22 +1202,21 @@
     updateDropTimer();
   }
 
-  function ensureDropParticles() {
-    const container = el("drop-particles");
-    if (!container || container.childElementCount) return;
-    const count = 24;
-    for (let index = 0; index < count; index += 1) {
-      const particle = document.createElement("span");
-      particle.style.setProperty(
-        "--a", `${(360 / count) * index + (index % 2 ? 8 : -8)}deg`);
-      particle.style.setProperty("--r", `${112 + (index % 5) * 22}px`);
-      particle.style.setProperty("--delay", `${(index % 7) * 0.018}s`);
-      particle.style.setProperty("--s", index % 3 === 0 ? "1.5" : "1");
-      container.append(particle);
-    }
-  }
-
+  const dropMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   let dropSession = null;
+  function stopDropMotion() {
+    if (!dropSession || dropSession.cancelled || el("drop-overlay").classList.contains("is-results")) return;
+    dropSession.skipped = true;
+    dropSession.wake?.();
+    el("drop-overlay").classList.add("is-skipped");
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) stopDropMotion();
+  });
+  dropMotion.addEventListener?.("change", () => {
+    if (dropMotion.matches) stopDropMotion();
+  });
+
   function startDropOpening({ gift = false, crafted = false } = {}) {
     const overlay = el("drop-overlay");
     const session = { skipped: false, cancelled: false, wake: null, gift, crafted };
@@ -1232,8 +1235,8 @@
     el("drop-title").textContent = gift ? "Распаковываем подарок…" : crafted ? "Создаём карту…" : "Призываем карту…";
     el("drop-rarity").textContent = "";
     el("drop-description").textContent = "Соединяемся со звёздами…";
+    el("drop-portal").setAttribute("aria-hidden", "true");
     el("drop-revealed-card").replaceChildren();
-    ensureDropParticles();
     el("drop-title").focus();
     state.dropStageTimer = setTimeout(() => {
       if (dropSession === session && !session.cancelled) {
@@ -1263,7 +1266,7 @@
     });
   }
 
-  function prepareDropImage(card, image, session) {
+  function prepareDropImage(card, image, session, timeout) {
     image.loading = "eager";
     return new Promise((resolve) => {
       const finish = (ready) => {
@@ -1272,7 +1275,7 @@
         resolve(ready);
       };
       const cancel = () => finish(false);
-      const timer = setTimeout(cancel, 8000);
+      const timer = setTimeout(cancel, timeout);
       session.wake = cancel;
       loadCardImageUrl(card, "").then(async (url) => {
         image.src = url;
@@ -1285,45 +1288,47 @@
   async function revealDrop(card, session) {
     const overlay = el("drop-overlay");
     const cardElement = cardButton(card, false, false, null, "");
-    cardElement.setAttribute("aria-disabled", "true");
+    cardElement.tabIndex = -1;
     el("drop-revealed-card").replaceChildren(cardElement);
-    overlay.className = `drop-overlay is-preparing ${rarityClass(card.rarity)}`;
     el("drop-description").textContent = "Подготавливаем изображение карты…";
-    const ready = await prepareDropImage(card, cardElement.querySelector("img"), session);
+    const ready = await prepareDropImage(card, cardElement.querySelector("img"), session, 2400);
     if (session.skipped || session.cancelled) return;
     if (!ready) {
       showNotice("Карта сохранена. Изображение ещё загружается — его можно посмотреть в коллекции.");
       return;
     }
     el("drop-title").textContent = session.crafted ? "Карта создана" : "Призыв";
-    el("drop-rarity").textContent = card.rarity_title;
-    el("drop-description").textContent = "Свет раскрывает новую встречу…";
-    await dropWait(session, 900);
-    if (session.skipped || session.cancelled) return;
+    el("drop-description").textContent = "";
     overlay.className = `drop-overlay is-revealing ${rarityClass(card.rarity)}`;
     haptic(card.rarity === "mythical" || card.rarity === "legendary" ? "heavy" : "medium");
-    await dropWait(session, 1050);
-    el("drop-description").textContent = card.name;
+    await dropWait(session, 900);
     if (session.skipped || session.cancelled) return;
     overlay.className = `drop-overlay is-revealed ${rarityClass(card.rarity)}`;
+    el("drop-rarity").textContent = card.rarity_title;
+    el("drop-description").textContent = card.name;
     if (session.gift && card.print_mark) {
       const seal = printNumberLabel(card);
       seal.classList.add("gift-print-flash");
       el("drop-revealed-card").append(seal);
     }
-    await dropWait(session, 850);
+    await dropWait(session, 600);
   }
 
   async function revealDropSequence(cards, session) {
     if (session.skipped || session.cancelled) return;
     const grid = el("drop-sequence");
     const progress = el("drop-progress");
-    const tiles = cards.map(() => {
+    const revealFx = el("drop-portal").querySelector(".drop-reveal-fx");
+    const tiles = cards.map((card) => {
       const tile = document.createElement("div");
       tile.className = "drop-sequence-tile";
       const turn = document.createElement("div");
       turn.className = "drop-sequence-turn";
-      tile.append(turn);
+      const face = cardButton(card, false, false, null, "");
+      face.classList.add("drop-sequence-face");
+      face.tabIndex = -1;
+      turn.append(face);
+      tile.append(turn, revealFx.cloneNode(true));
       return tile;
     });
     grid.replaceChildren(...tiles);
@@ -1335,54 +1340,66 @@
     el("drop-title").textContent = "Призыв";
     el("drop-description").textContent = "";
     el("drop-to-results").hidden = false;
-    await dropWait(session, 550);
+    await dropWait(session, 280);
 
     for (const [index, card] of cards.entries()) {
       if (session.skipped || session.cancelled || document.hidden) break;
-      const face = cardButton(card, false, false, null, "");
-      face.classList.add("drop-sequence-face");
-      face.tabIndex = -1;
       const tile = tiles[index];
-      tile.firstElementChild.append(face);
-      const ready = await prepareDropImage(card, face.querySelector("img"), session);
+      const ready = await prepareDropImage(card, tile.querySelector("img"), session, 1000);
       if (!ready || session.skipped || session.cancelled || document.hidden) break;
       tile.classList.add("is-flipped", rarityClass(card.rarity));
       progress.textContent = `${index + 1} / ${cards.length} · ${card.name} · ${card.rarity_title}`;
       haptic(card.rarity === "mythical" || card.rarity === "legendary" ? "heavy" : "medium");
-      await dropWait(session, 780);
+      await dropWait(session, 730);
     }
   }
 
   function showDropResults(cards) {
-    state.lastDropCard = cards.length === 1 ? cards[0] : null;
+    const single = cards.length === 1;
+    state.lastDropCard = single ? cards[0] : null;
     const overlay = el("drop-overlay");
-    overlay.className = "drop-overlay is-results";
+    overlay.className = single
+      ? `drop-overlay is-results is-single-result ${rarityClass(cards[0].rarity)}`
+      : "drop-overlay is-results is-batch-result";
     el("drop-sequence").hidden = true;
     el("drop-sequence").replaceChildren();
     el("drop-progress").hidden = true;
     el("drop-to-results").hidden = true;
-    const results = el("drop-results");
-    results.replaceChildren(...cards.map((card) => {
-      const item = document.createElement("div");
-      item.className = "drop-result-item";
-      const button = cardButton(card, false, false, () => openDropCollection(cards, card), "");
-      const label = document.createElement("span");
-      label.textContent = `${card.name} · ${card.rarity_title}`;
-      item.append(button, label);
-      return item;
-    }));
-    results.hidden = false;
+    if (single) {
+      const card = cards[0];
+      const face = el("drop-revealed-card");
+      let button = face.firstElementChild;
+      if (!button) {
+        button = cardButton(card, false, false, null, "");
+        face.append(button);
+      }
+      button.tabIndex = 0;
+      button.onclick = () => openDropCollection(cards, card);
+      el("drop-portal").removeAttribute("aria-hidden");
+    } else {
+      const results = el("drop-results");
+      results.replaceChildren(...cards.map((card) => {
+        const item = document.createElement("div");
+        item.className = "drop-result-item";
+        const button = cardButton(card, false, false, () => openDropCollection(cards, card), "");
+        const label = document.createElement("span");
+        label.textContent = `${card.name} · ${card.rarity_title}`;
+        item.append(button, label);
+        return item;
+      }));
+      results.hidden = false;
+    }
     el("drop-title").textContent = dropSession?.crafted ? "Карта создана!"
-      : cards.length === 1 ? "Карта получена!" : `Получено карт: ${cards.length}`;
-    el("drop-rarity").textContent = "";
-    el("drop-description").textContent = cards.length === 1 ? "Карта сохранена в коллекции." : "Карты сохранены в коллекции.";
+      : single ? "Карта получена!" : `Получено карт: ${cards.length}`;
+    el("drop-rarity").textContent = single ? cards[0].rarity_title : "";
+    el("drop-description").textContent = single ? "Карта сохранена в коллекции." : "Карты сохранены в коллекции.";
     el("drop-skip").hidden = true;
     el("drop-close").hidden = false;
     el("drop-followup").hidden = false;
-    el("drop-dust").hidden = cards.length !== 1 || Boolean(dropSession?.gift || dropSession?.first || dropSession?.crafted);
+    el("drop-dust").hidden = !single || Boolean(dropSession?.gift || dropSession?.first || dropSession?.crafted);
     el("drop-to-collection").onclick = () => openDropCollection(cards, null);
-    if (cards.length === 1) el("drop-dust").textContent = `Распылить за ${cards[0].dust_value} пыли`;
-    el("drop-close").focus();
+    if (single) el("drop-dust").textContent = `Распылить за ${cards[0].dust_value} пыли`;
+    el("drop-close").focus({ preventScroll: true });
     haptic("success");
   }
 
@@ -1402,8 +1419,7 @@
     const session = dropSession;
     clearTimeout(state.dropStageTimer);
     if (!session || session.cancelled) return;
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!reduced && !document.hidden) {
+    if (!dropMotion.matches && !document.hidden) {
       const delay = session.crafted ? 220 : DROP_MIN_OPEN_MS;
       await dropWait(session, Math.max(0, delay - (performance.now() - state.dropStartedAt)));
       if (!document.hidden && !session.skipped && !session.cancelled) {
@@ -2196,6 +2212,8 @@
       }
     }
     detailAnchor = null;
+    sheetReturnFocus?.focus({ preventScroll: true });
+    sheetReturnFocus = null;
   }
   function backFromSheet() {
     if (sheetBack) sheetBack();
@@ -2203,6 +2221,7 @@
   }
   function openSheet(title, body, main, back = null) {
     sheetBack = back;
+    sheetReturnFocus = null;
     el("toast").classList.remove("show");
     el("sheet").classList.remove("sheet--card");
     el("sheet-title").textContent = title;
@@ -2215,11 +2234,7 @@
     syncBackButton();
   }
 
-  function openCardSheet(card, { revealUpgrade = false, previousImageUrl, upgradeMask, source } = {}) {
-    if (!revealUpgrade) haptic("light");
-    detailAnchor = state.activePage === "collection" ? card.id : null;
-    const body = document.createElement("div");
-    body.className = "card-detail-content";
+  function renderCardInspection(card, previousImageUrl) {
     const preview = cardButton(card, false, false, null, "", previousImageUrl);
     preview.classList.add("sheet-card");
     preview.tabIndex = -1;
@@ -2227,16 +2242,25 @@
     const presentation = document.createElement("div");
     presentation.className = "card-inspect-visual";
     presentation.append(preview);
+    return presentation;
+  }
+
+  function openCardSheet(card, { revealUpgrade = false, previousImageUrl, upgradeMask, source } = {}) {
+    if (!revealUpgrade) haptic("light");
+    detailAnchor = state.activePage === "collection" ? card.id : null;
+    const body = document.createElement("div");
+    body.className = "card-detail-content";
+    const presentation = renderCardInspection(card, previousImageUrl);
     body.classList.toggle("card-upgrade-complete", revealUpgrade);
     upgradeMask?.then((url) => {
-      if (!url || !preview.isConnected || el("sheet").hidden) return;
+      if (!url || !presentation.isConnected || el("sheet").hidden) return;
       const effect = document.createElement("span");
       effect.className = "card-upgrade-effect";
       effect.dataset.level = card.upgrade_level;
       effect.setAttribute("aria-hidden", "true");
       effect.style.setProperty("--upgrade-mask", `url("${url}")`);
       effect.addEventListener("animationend", () => effect.remove(), { once: true });
-      preview.querySelector("img").after(effect);
+      presentation.querySelector("img").after(effect);
     });
     const actions = document.createElement("div");
     actions.className = "sheet-actions";
@@ -4918,8 +4942,7 @@
   el("drop-close").addEventListener("click", closeDropOpening);
   function skipDropReveal() {
     if (!dropSession) return;
-    dropSession.skipped = true;
-    dropSession.wake?.();
+    stopDropMotion();
     el("drop-skip").hidden = true;
     el("drop-to-results").hidden = true;
     if (!el("drop-overlay").classList.contains("is-sequence")) {
@@ -5315,6 +5338,22 @@
     return button;
   }
 
+  function openShowcaseCardPreview(card, trigger) {
+    haptic("light");
+    const body = document.createElement("div");
+    body.className = "card-detail-content card-detail-preview";
+    const name = document.createElement("h3");
+    name.textContent = card.name;
+    const details = document.createElement("p");
+    details.className = "hint card-frame-status";
+    details.textContent = [card.series, card.rarity_title, formatPrintNumber(card)].filter(Boolean).join(" · ");
+    body.append(renderCardInspection(card), name, details);
+    openSheet(card.name, body);
+    el("sheet").classList.add("sheet--card");
+    sheetReturnFocus = trigger;
+    el("sheet-close").focus({ preventScroll: true });
+  }
+
   function renderDisplay(item, editing = false) {
     const article = document.createElement("article");
     article.className = "showcase-art";
@@ -5336,7 +5375,7 @@
       const slot = document.createElement("div");
       slot.className = "showcase-slot";
       const tile = cardButton(card, false, false, null, "");
-      tile.tabIndex = -1;
+      tile.addEventListener("click", () => openShowcaseCardPreview(card, tile));
       slot.append(tile);
       if (editing) {
         const controls = document.createElement("div");
