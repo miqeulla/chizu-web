@@ -201,13 +201,18 @@ const animations = {
     "titan-heart": animateTitan,
 };
 
-function renderFrame(context, image, id, seconds) {
+function renderFrame(context, image, id, seconds, badgeBox) {
     const position = (seconds % loopDuration) / loopDuration;
     context.clearRect(0, 0, frameWidth, frameHeight);
     context.drawImage(image, 0, 0, frameWidth, frameHeight);
     animations[id](context, position, image);
     // The card renderer already drew these labels over the static frame.
-    context.clearRect(68, 0, 264, 59);
+    if (badgeBox) {
+        const [left, top, right, bottom] = badgeBox;
+        context.clearRect(left, top, right - left + 1, bottom - top + 1);
+    } else {
+        context.clearRect(68, 0, 264, 59);
+    }
     if (id === "titan-heart") context.clearRect(62, 450, 276, 45);
     else context.clearRect(38, 484, 324, 86);
     context.clearRect(165, 577, 70, 23);
@@ -239,8 +244,8 @@ function tick(time) {
                 visible.delete(canvas);
                 continue;
             }
-            const { context, image, id } = canvases.get(canvas);
-            renderFrame(context, image, id, time / 1000);
+            const { context, image, id, badgeBox } = canvases.get(canvas);
+            renderFrame(context, image, id, time / 1000, badgeBox);
         }
     }
     syncAnimation();
@@ -261,7 +266,7 @@ const observer = new IntersectionObserver((entries) => {
 document.addEventListener("visibilitychange", syncAnimation);
 reducedMotion.addEventListener("change", syncAnimation);
 
-export async function mountFrameMotion(container, id, url) {
+export async function mountFrameMotion(container, id, url, badgeBox) {
     if (!Object.hasOwn(animations, id)) return;
     if (!images.has(url)) {
         const image = new Image();
@@ -278,8 +283,8 @@ export async function mountFrameMotion(container, id, url) {
     canvas.height = frameHeight;
     const context = canvas.getContext("2d");
     if (!context) return;
-    canvases.set(canvas, { context, image, id });
-    renderFrame(context, image, id, 0);
+    canvases.set(canvas, { context, image, id, badgeBox });
+    renderFrame(context, image, id, 0, badgeBox);
     container.append(canvas);
     observer.observe(canvas);
 }
