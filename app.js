@@ -729,19 +729,29 @@
     return svg;
   }
 
-  function frameEffects(effect, cardRarity = "epic", frameRarity = "epic", accent, ornamentUrl, theme, motionUrl, badgeBox) {
+  function frameEffects(frame, cardRarity = frame?.rarity) {
+    if (!frame) return null;
+    const { effect, rarity: frameRarity, accent, ornament_url: ornamentUrl, style: theme,
+      motion_url: motionUrl, rarity_badge_box: badgeBox, portrait_layout: portraitLayout } = frame;
     if (!effect || (!motionUrl && !/^[a-z_]+$/.test(effect))) return null;
     const fx = document.createElement("span");
     fx.setAttribute("aria-hidden", "true");
     if (cardRarity === "legendary" || cardRarity === "mythical") {
-      fx.style.inset = "2.83% 4.13%";
+      fx.style.inset = portraitLayout ? "2.88% 4.20%" : "2.83% 4.13%";
+    }
+    if (portraitLayout) {
+      const [left, top, right, bottom] = portraitLayout.target;
+      const x = (value) => `${value / 4}%`;
+      const y = (value) => `${value / 6}%`;
+      fx.style.clipPath = `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0,
+        ${x(left)} ${y(top)}, ${x(left)} ${y(bottom)}, ${x(right)} ${y(bottom)}, ${x(right)} ${y(top)}, ${x(left)} ${y(top)})`;
     }
     if (motionUrl) {
       fx.className = "frame-live-fx frame-live-fx--motion";
       const moduleUrl = new URL("frame-motion.js", staticBase);
       if (appVersion) moduleUrl.searchParams.set("v", appVersion);
       import(moduleUrl.href)
-        .then(({ mountFrameMotion }) => mountFrameMotion(fx, effect, frameAssetUrl(motionUrl), badgeBox))
+        .then(({ mountFrameMotion }) => mountFrameMotion(fx, effect, frameAssetUrl(motionUrl), badgeBox, portraitLayout))
         .catch(() => fx.remove());
       return fx;
     }
@@ -883,9 +893,12 @@
     }
     const effects = cardEffects(card.rarity);
     if (effects) button.append(effects);
-    const frameFx = frameEffects(card.frame_effect, card.rarity, card.frame_rarity,
-      card.frame_accent, card.frame_ornament_url, card.frame_theme,
-      inspect ? card.frame_motion_url : null, card.frame_rarity_badge_box);
+    const frameFx = frameEffects({
+      effect: card.frame_effect, rarity: card.frame_rarity, accent: card.frame_accent,
+      ornament_url: card.frame_ornament_url, style: card.frame_theme,
+      motion_url: inspect ? card.frame_motion_url : null, rarity_badge_box: card.frame_rarity_badge_box,
+      portrait_layout: card.frame_portrait_layout,
+    }, card.rarity);
     if (frameFx) button.append(frameFx);
     const marks = document.createElement("span");
     marks.className = "card-marks";
@@ -2656,8 +2669,7 @@
         image.src = url;
         image.alt = `${card.name} · ${frame.title}`;
         visual.append(image);
-        const fx = frameEffects(frame.effect, card.rarity, frame.rarity, frame.accent,
-          frame.ornament_url, frame.style, frame.motion_url, frame.rarity_badge_box);
+        const fx = frameEffects(frame, card.rarity);
         if (fx) visual.append(fx);
         status.textContent = current ? `Сейчас на карте: ${frame.title}` : `Примерка: ${frame.title}`;
       } catch {
@@ -3869,8 +3881,7 @@
       visual.hidden = false;
       const frame = framePreviewOptions.find((item) => item.id === state.frameShopFrameId);
       image.dataset.cardRarity = card.rarity;
-      const fx = frameEffects(frame?.effect, card.rarity, frame?.rarity, frame?.accent,
-        frame?.ornament_url, frame?.style, frame?.motion_url, frame?.rarity_badge_box);
+      const fx = frameEffects(frame, card.rarity);
       if (fx) visual.append(fx);
       status.textContent = frame
         ? `Примерка: ${frame.title}${frame.id === card.frame_style ? " · На этой карте"
@@ -3941,8 +3952,7 @@
     image.decoding = "async";
     visual.append(image);
     if (frame) {
-      const effect = frameEffects(frame.effect, frame.rarity, frame.rarity, frame.accent,
-        frame.ornament_url, frame.style, frame.motion_url, frame.rarity_badge_box);
+      const effect = frameEffects(frame);
       if (effect) visual.append(effect);
     }
     return visual;
@@ -4057,9 +4067,12 @@
       updateCaseButton();
       const legacyDuplicate = result.duplicate && !result.frame_copies_awarded;
       const fx = result.frame_id && !legacyDuplicate
-        ? frameEffects(result.frame_effect, result.frame_rarity, result.frame_rarity,
-          result.frame_accent, result.frame_ornament_url, result.frame_theme, result.frame_motion_url,
-          result.frame_rarity_badge_box)
+        ? frameEffects({
+          effect: result.frame_effect, rarity: result.frame_rarity, accent: result.frame_accent,
+          ornament_url: result.frame_ornament_url, style: result.frame_theme,
+          motion_url: result.frame_motion_url, rarity_badge_box: result.frame_rarity_badge_box,
+          portrait_layout: result.frame_portrait_layout,
+        })
         : null;
       revealRouletteAward(caseRewardSummary(result),
         casePrizeImage(legacyDuplicate ? "dust" : result.reward, legacyDuplicate ? null : result.frame_preview_url), fx,
@@ -4279,8 +4292,7 @@
       try { await animateRoulette(pack.items.map(prize), prize(result.frame)); }
       catch (_error) { /* Reveal the server result even if motion is unavailable. */ }
       finally {
-        const fx = frameEffects(result.frame.effect, result.frame.rarity, result.frame.rarity,
-          result.frame.accent, result.frame.ornament_url, result.frame.style);
+        const fx = frameEffects(result.frame);
         const summary = result.duplicate
           ? (result.compensation_dust ? `Дубликат «${result.frame.title}» · ${result.compensation_dust} пыли.`
             : `Получена ещё одна рамка «${result.frame.title}»!`)
