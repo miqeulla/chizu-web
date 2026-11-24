@@ -1198,7 +1198,6 @@ img.frame-preview {
   overflow: hidden;
   background: var(--surface-2);
 }
-.frame-picker-preview > img { display: block; width: 100%; }
 #frames-pane { display: grid; gap: 10px; }
 #frames-pane[hidden] { display: none; }
 #frames-pane .hint { margin: 0; }
@@ -4361,15 +4360,24 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 #crystals-page .frame-item img.frame-preview {
   border: 0; background: #161222; object-fit: contain; height: auto; aspect-ratio: 2 / 3;
 }
-.frame-shop-visual { position: relative; justify-self: center; width: min(100%, 240px, 33dvh); overflow: hidden; border-radius: 12px; }
+.frame-shop-visual {
+  position: relative; justify-self: center; align-self: start;
+  width: min(100%, 240px, 33dvh); aspect-ratio: 2 / 3;
+  overflow: hidden; border-radius: 12px;
+}
 .frame-shop-visual[hidden] { display: none; }
-.frame-shop-visual #frame-shop-image { display: block; width: 100%; height: auto; }
+.frame-shop-visual > img, .frame-picker-preview > img {
+  position: absolute; inset: 0; display: block;
+  width: 100%; height: 100%; object-fit: contain;
+}
 .frame-live-fx {
   position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none;
   --fx-color: #75e8ff; --frame-x: 0%; --frame-y: 0%; --frame-corner-size: 24%;
 }
 .frame-live-fx--motion::before, .frame-live-fx--motion::after { display: none; }
-.frame-live-fx--motion canvas { display: block; width: 100%; height: 100%; }
+.frame-live-fx--motion canvas {
+  position: absolute; inset: 0; display: block; width: 100%; height: 100%;
+}
 .frame-live-fx::before {
   --frame-stroke: 5px;
   content: ""; position: absolute; inset: 0; border-radius: 8px;

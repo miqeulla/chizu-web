@@ -14,6 +14,13 @@ function glow(context, x, y, radius, rgb, opacity) {
     context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
 }
 
+function maskToFrame(context, image) {
+    context.save();
+    context.globalCompositeOperation = "destination-in";
+    context.drawImage(image, 0, 0, frameWidth, frameHeight);
+    context.restore();
+}
+
 function trackPoint(track, progress) {
     const offset = Math.max(0, Math.min(1, progress)) * (track.length - 1);
     const index = Math.min(Math.floor(offset), track.length - 2);
@@ -57,11 +64,9 @@ const alchemyTubes = [
     [[330, 478], [349, 444], [350, 394], [350, 341], [350, 285], [350, 234], [354, 180], [343, 153]],
 ];
 
-function animateAlchemy(context, position) {
+function animateAlchemy(context, position, image) {
     const angle = position * fullCircle;
     const colors = ["151, 255, 100", "255, 209, 96"];
-    context.save();
-    context.globalCompositeOperation = "source-atop";
     for (let index = 0; index < alchemyTubes.length; index += 1) {
         const track = alchemyTubes[index];
         const color = colors[index];
@@ -82,7 +87,7 @@ function animateAlchemy(context, position) {
     const reservoir = 0.58 + 0.29 * Math.sin(angle * 2);
     glow(context, 66, 478, 47, colors[0], reservoir);
     glow(context, 336, 109, 32, colors[1], 1.12 - reservoir);
-    context.restore();
+    maskToFrame(context, image);
 
     sparkle(context, 66, 480, 10, "#e8ffca", Math.pow(Math.max(0, Math.sin(angle * 2)), 5));
     sparkle(context, 336, 109, 8, "#fff1c3", Math.pow(Math.max(0, -Math.sin(angle * 2)), 5));
@@ -121,17 +126,6 @@ function drawShard(context, image, shard, position) {
 }
 
 function animateMirror(context, position, image) {
-    context.save();
-    context.globalCompositeOperation = "destination-out";
-    context.fillStyle = "#000";
-    for (const shard of mirrorShards) {
-        shardPath(context, shard);
-        context.fill();
-    }
-    context.restore();
-
-    context.save();
-    context.globalCompositeOperation = "source-atop";
     const sweep = position * 820 - 180;
     for (let index = 0; index < 2; index += 1) {
         const offset = sweep - index * 135;
@@ -145,6 +139,15 @@ function animateMirror(context, position, image) {
         context.fillStyle = light;
         context.fillRect(0, 0, frameWidth, frameHeight);
     }
+    maskToFrame(context, image);
+
+    context.save();
+    context.globalCompositeOperation = "destination-out";
+    context.fillStyle = "#000";
+    for (const shard of mirrorShards) {
+        shardPath(context, shard);
+        context.fill();
+    }
     context.restore();
 
     for (const shard of mirrorShards) drawShard(context, image, shard, position);
@@ -156,21 +159,19 @@ const titanSeams = [
     [titanCore, [250, 541], [287, 517], [331, 471], [345, 431], [362, 374], [356, 328], [358, 264], [351, 215], [339, 158], [335, 112], [319, 79], [267, 62]],
 ];
 
-function animateTitan(context, position) {
+function animateTitan(context, position, image) {
     const phase = (position * 2) % 1;
     const heartbeat = Math.exp(-Math.pow((phase - 0.13) / 0.049, 2))
         + 0.58 * Math.exp(-Math.pow((phase - 0.31) / 0.066, 2));
     const pulse = (phase - 0.1) * 1.4;
     const [coreX, coreY] = titanCore;
-    context.save();
-    context.globalCompositeOperation = "source-atop";
     glow(context, coreX, coreY, 44 + 25 * heartbeat, "255, 88, 29", 0.19 + 0.77 * heartbeat);
     glow(context, coreX, coreY, 19, "255, 213, 146", 0.74 * heartbeat);
     for (const seam of titanSeams) {
         arcGlow(context, seam, pulse, "255, 97, 31", 1, 15);
         arcGlow(context, seam, pulse - 0.28, "252, 159, 71", 0.47, 10);
     }
-    context.restore();
+    maskToFrame(context, image);
 
     const wave = (phase - 0.2) * 1.6;
     if (wave > 0 && wave < 1) {
@@ -205,7 +206,6 @@ function renderFrame(context, image, id, seconds, badgeBox, portraitLayout) {
     context.clearRect(0, 0, context.canvas.width, context.canvas.height);
     context.save();
     context.translate(...(portraitLayout?.offset ?? [0, 0]));
-    context.drawImage(image, 0, 0, frameWidth, frameHeight);
     animations[id](context, position, image);
     context.restore();
     // The card renderer already drew these labels over the static frame.

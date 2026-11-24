@@ -736,6 +736,15 @@
     if (!effect || (!motionUrl && !/^[a-z_]+$/.test(effect))) return null;
     const fx = document.createElement("span");
     fx.setAttribute("aria-hidden", "true");
+    if (motionUrl) {
+      fx.className = "frame-live-fx frame-live-fx--motion";
+      const moduleUrl = new URL("frame-motion.js", staticBase);
+      if (appVersion) moduleUrl.searchParams.set("v", appVersion);
+      import(moduleUrl.href)
+        .then(({ mountFrameMotion }) => mountFrameMotion(fx, effect, frameAssetUrl(motionUrl), badgeBox, portraitLayout))
+        .catch(() => fx.remove());
+      return fx;
+    }
     if (portraitLayout?.size) {
       const [width, height] = portraitLayout.size;
       const [offsetX, offsetY] = portraitLayout.offset;
@@ -747,15 +756,6 @@
       const holes = portraitLayout.labels.map(([left, top, right, bottom]) =>
         `${x(left)} ${y(top)}, ${x(left)} ${y(bottom + 1)}, ${x(right + 1)} ${y(bottom + 1)}, ${x(right + 1)} ${y(top)}, ${x(left)} ${y(top)}`);
       fx.style.clipPath = `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${holes.join(", 0 0, ")})`;
-    }
-    if (motionUrl) {
-      fx.className = "frame-live-fx frame-live-fx--motion";
-      const moduleUrl = new URL("frame-motion.js", staticBase);
-      if (appVersion) moduleUrl.searchParams.set("v", appVersion);
-      import(moduleUrl.href)
-        .then(({ mountFrameMotion }) => mountFrameMotion(fx, effect, frameAssetUrl(motionUrl), badgeBox, portraitLayout))
-        .catch(() => fx.remove());
-      return fx;
     }
     const premium = frameRarity === "legendary" || frameRarity === "mythical";
     fx.className = `frame-live-fx frame-live-fx--${effect} frame-live-fx--tier-${premium ? "ssr" : frameRarity === "epic" ? "sr" : "r"}`;
@@ -2678,6 +2678,8 @@
         if (version !== previewVersion || !body.isConnected) return;
         const image = document.createElement("img");
         image.src = url;
+        await image.decode();
+        if (version !== previewVersion || !body.isConnected) return;
         image.alt = `${card.name} · ${frame.title}`;
         visual.append(image);
         const fx = frameEffects(frame, image);
@@ -3888,6 +3890,8 @@
       const url = await loadCardImageUrl(card, "", state.frameShopFrameId);
       if (!dialog.open || version !== state.framePreviewVersion) return;
       image.src = url;
+      await image.decode();
+      if (!dialog.open || version !== state.framePreviewVersion) return;
       image.hidden = false;
       visual.hidden = false;
       const frame = framePreviewOptions.find((item) => item.id === state.frameShopFrameId);
