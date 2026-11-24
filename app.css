@@ -1140,8 +1140,9 @@ img {
 .frame-shop-preview[open] { display: grid; gap: 8px; }
 .frame-shop-preview:not([open]), .frame-shop-preview [hidden] { display: none; }
 .frame-shop-preview::backdrop { background: #0b0814cc; }
-.frame-shop-preview .sheet-head, #frame-shop-preview-status { margin: 0; }
-.frame-shop-preview select { width: 100%; min-height: 44px; padding: 8px 10px; }
+.frame-shop-preview .sheet-head { margin: 0; }
+.frame-shop-card-field { display: flex; align-items: center; gap: 10px; }
+.frame-shop-preview select { width: 100%; min-width: 0; min-height: 44px; padding: 8px 10px; }
 .frame-shop-preview .btn { min-height: 44px; }
 html:has(.frame-shop-preview[open]) { overflow: hidden; }
 .frame-shop-pages { display: flex; align-items: center; gap: 12px; }
@@ -1189,48 +1190,90 @@ img.frame-preview {
 
 .frame-picker-body { display: grid; gap: 10px; }
 .frame-picker-body > .btn:first-child { justify-self: start; }
-.frame-picker-preview {
+.frame-picker-body .btn { min-height: 44px; }
+.frame-picker-actions { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
+.frame-fitting {
+  display: grid;
+  grid-template-columns: min(44%, 188px, 26dvh) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #150a2466;
+}
+.frame-fitting:has(> [hidden]) { grid-template-columns: 1fr; }
+.frame-fitting-visual {
   position: relative;
-  width: min(100%, 144px);
   aspect-ratio: 2 / 3;
-  margin-inline: auto;
   border-radius: 12px;
   overflow: hidden;
-  background: var(--surface-2);
+  background: radial-gradient(ellipse, #6d419958, #160d27 78%);
 }
+.frame-fitting-details { display: grid; gap: 6px; overflow-wrap: anywhere; }
+.frame-fitting-details p { margin: 0; }
+.frame-fitting-details p:empty { display: none; }
+.frame-fitting-details strong { font-size: 16px; line-height: 1.25; }
+.frame-fitting-label { color: #f0cdff; font-size: 12px; font-weight: 700; }
+.frame-fitting-equipped { color: var(--muted); font-size: 12px; }
 #frames-pane { display: grid; gap: 10px; }
 #frames-pane[hidden] { display: none; }
 #frames-pane .hint { margin: 0; }
 .frame-picker-body .hint { margin: 0; }
 .frame-picker {
+  position: relative;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+  grid-auto-rows: max-content;
+  align-content: start;
+  gap: 6px;
+  max-height: clamp(108px, 22dvh, 190px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: #ab75cb #1b0f29;
+  scrollbar-width: thin;
+  padding: 3px;
 }
 .frame-option {
-  display: grid;
-  gap: 5px;
-  align-content: start;
+  position: relative;
+  display: block;
   min-width: 0;
-  padding: 7px;
+  min-height: 44px;
+  aspect-ratio: 2 / 3;
   border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface-2);
-  color: inherit;
-  text-align: left;
+  border-radius: 10px;
+  background: linear-gradient(155deg, color-mix(in srgb, var(--frame-color, var(--rarity-common)) 20%, #221433), #160e23);
+  cursor: pointer;
 }
-.frame-option .frame-preview { width: 100%; height: 58px; object-fit: contain; }
-.frame-option strong {
-  font-size: 12px;
-  overflow-wrap: anywhere;
+.frame-option > input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
 }
-.frame-option .hint { font-size: 10px; line-height: 1.3; }
-.frame-option.selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent) inset;
+.frame-option > img {
+  position: absolute;
+  inset: 3px;
+  width: calc(100% - 6px);
+  height: calc(100% - 6px);
+  object-fit: contain;
 }
-.frame-option:disabled { cursor: default; opacity: .65; }
-.frame-option:not(:disabled):active { transform: scale(.97); }
+.frame-option-badge {
+  position: absolute;
+  inset: auto 2px 3px;
+  padding: 2px;
+  border-radius: 5px;
+  background: #1a1124ef;
+  color: #efdcff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+.frame-option-badge:empty { display: none; }
+.frame-option--equipped .frame-option-badge { background: #634285; color: #fff; }
+.frame-option:has(> :checked) { border-color: #edc5ff; box-shadow: 0 0 0 1px #edc5ff; }
+.frame-option:has(> :focus-visible) { outline: 2px solid #fff; outline-offset: 1px; }
 .frame-option[data-rarity="rare"] { --frame-color: var(--rarity-rare); }
 .frame-option[data-rarity="epic"] { --frame-color: var(--rarity-epic); }
 .frame-option[data-rarity="legendary"] { --frame-color: var(--rarity-legendary); }
@@ -4360,13 +4403,7 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 #crystals-page .frame-item img.frame-preview {
   border: 0; background: #161222; object-fit: contain; height: auto; aspect-ratio: 2 / 3;
 }
-.frame-shop-visual {
-  position: relative; justify-self: center; align-self: start;
-  width: min(100%, 240px, 33dvh); aspect-ratio: 2 / 3;
-  overflow: hidden; border-radius: 12px;
-}
-.frame-shop-visual[hidden] { display: none; }
-.frame-shop-visual > img, .frame-picker-preview > img {
+.frame-fitting-visual > img {
   position: absolute; inset: 0; display: block;
   width: 100%; height: 100%; object-fit: contain;
 }
@@ -4490,7 +4527,7 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 .frame-live-fx[data-theme="gothic"] .frame-fx-corner > img { animation-name: frame-ornament-crystal; }
 .frame-live-fx[data-theme="ocean"] .frame-fx-corner > img { animation-name: frame-ornament-wave; animation-duration: 4s; }
 .sheet-card .frame-fx-corner > img, .card:hover .frame-fx-corner > img,
-.card:focus-visible .frame-fx-corner > img, .sheet:not([hidden]) .frame-picker-preview .frame-fx-corner > img,
+.card:focus-visible .frame-fx-corner > img, .sheet:not([hidden]) .frame-fitting-visual .frame-fx-corner > img,
 .sheet:not([hidden]) .reward-visual .frame-fx-corner > img,
 .frame-shop-preview[open] .frame-fx-corner > img,
 .frame-roulette-overlay:not([hidden]) .frame-fx-corner > img { animation-play-state: running; }
@@ -4500,8 +4537,8 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 .frame-roulette-overlay:not([hidden]) .frame-live-fx::after,
 .sheet:not([hidden]) .reward-visual .frame-live-fx::before,
 .sheet:not([hidden]) .reward-visual .frame-live-fx::after,
-.sheet:not([hidden]) .frame-picker-preview .frame-live-fx::before,
-.sheet:not([hidden]) .frame-picker-preview .frame-live-fx::after { animation-play-state: running; }
+.sheet:not([hidden]) .frame-fitting-visual .frame-live-fx::before,
+.sheet:not([hidden]) .frame-fitting-visual .frame-live-fx::after { animation-play-state: running; }
 @keyframes frame-energy-turn { to { --frame-energy-angle: 360deg; } }
 @keyframes frame-ornament-wing { from { transform: rotate(-5deg) scale(.97); } to { transform: rotate(5deg) scale(1.04); } }
 @keyframes frame-ornament-orbit { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

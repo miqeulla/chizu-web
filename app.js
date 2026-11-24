@@ -68,7 +68,7 @@
     collectionTotal: 0, ownedCardCount: 0,
     favorites: [], favoriteLimit: 20, shopFrames: [], framePacks: [], packOpening: false,
     frameShopCards: [], frameShopPage: 1, frameShopPages: 1,
-    frameShopCardId: null, frameShopFrameId: null, framePreviewVersion: 0,
+    frameShopCardId: null, frameShopFrameId: null,
     frameShopPinnedCard: null, frameShopCardsVersion: 0,
     tradeSubmitting: false, transferSubmitting: false, listingSubmitting: false,
     caseCatalog: null, caseOpening: false,
@@ -2616,6 +2616,114 @@
     }).catch(showError);
   }
 
+  function createFrameGallery(frames, name, selectFrame) {
+    const grid = document.createElement("div");
+    grid.className = "frame-picker";
+    grid.setAttribute("role", "radiogroup");
+    grid.setAttribute("aria-label", "Рамки для примерки");
+    const options = frames.map((frame) => {
+      const tile = document.createElement("label");
+      tile.className = "frame-option";
+      tile.dataset.rarity = frame.rarity;
+      tile.title = frame.title;
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = name;
+      input.addEventListener("change", () => selectFrame(frame));
+      const image = document.createElement("img");
+      image.alt = "";
+      image.loading = "lazy";
+      image.decoding = "async";
+      if (frame.preview_url) image.src = frameAssetUrl(frame.preview_url);
+      const badge = document.createElement("span");
+      badge.className = "frame-option-badge";
+      badge.setAttribute("aria-hidden", "true");
+      tile.append(input, image, badge);
+      grid.append(tile);
+      return { frame, tile, input, image, badge };
+    });
+    return {
+      grid,
+      update(selectedId, currentId, reveal = false) {
+        for (const { frame, tile, input, badge } of options) {
+          const current = frame.id === currentId;
+          const busy = frame.owned && !frame.available && !current;
+          input.checked = frame.id === selectedId;
+          badge.textContent = current ? "Надета" : busy ? "Занята" : "";
+          tile.classList.toggle("frame-option--equipped", current);
+          input.setAttribute("aria-label", [frame.title, badge.textContent].filter(Boolean).join(", "));
+          if (reveal && input.checked) {
+            grid.scrollTop = tile.offsetTop - (grid.clientHeight - tile.offsetHeight) / 2;
+          }
+        }
+      },
+      setClassicImage(card) {
+        const option = options.find(({ frame }) => frame.id === "classic");
+        loadCardImageUrl(card, "", "classic").then((url) => {
+          if (option.image.isConnected) option.image.src = url;
+        }).catch(() => {});
+      },
+    };
+  }
+
+  function createFrameFitting(isOpen) {
+    const element = document.createElement("div");
+    element.className = "frame-fitting";
+    const visual = document.createElement("div");
+    visual.className = "frame-fitting-visual";
+    const details = document.createElement("div");
+    details.className = "frame-fitting-details";
+    const label = document.createElement("p");
+    label.className = "frame-fitting-label";
+    const title = document.createElement("strong");
+    const meta = document.createElement("p");
+    meta.className = "hint";
+    const equipped = document.createElement("p");
+    equipped.className = "frame-fitting-equipped";
+    const status = document.createElement("p");
+    status.className = "hint";
+    status.setAttribute("role", "status");
+    details.append(label, title, meta, equipped, status);
+    element.append(visual, details);
+    let previewVersion = 0;
+
+    async function render(frame, card) {
+      const version = ++previewVersion;
+      const isCurrent = () => version === previewVersion && isOpen();
+      const current = frame.id === card?.frame_style;
+      label.textContent = current ? "Надета на карту" : "Примерка";
+      title.textContent = frame.title;
+      const metadata = [frame.rarity_title];
+      if (frame.id === "classic") metadata.push("Стандартная рамка");
+      else if (current && frame.available) metadata.push(`Свободно: ${frame.available}`);
+      else if (!current && frame.owned !== undefined) metadata.push(frameStockLabel(frame));
+      if (frame.chance !== undefined) metadata.push(`Шанс ${frame.chance}%`);
+      meta.textContent = metadata.filter(Boolean).join(" · ");
+      equipped.textContent = card && !current ? `Надета: ${hasCustomFrame(card) ? card.style_title : "Эмаль"}` : "";
+      visual.replaceChildren();
+      visual.hidden = !card;
+      status.textContent = card ? "Загружаем примерку…" : "Получите карту, чтобы примерить рамку.";
+      if (!card) return;
+      try {
+        const url = await loadCardImageUrl(card, "", frame.id);
+        if (!isCurrent()) return;
+        const image = document.createElement("img");
+        image.alt = `${card.name} · ${frame.title}`;
+        image.src = url;
+        await image.decode();
+        if (!isCurrent()) return;
+        visual.append(image);
+        const fx = frameEffects(frame, image);
+        if (fx) visual.append(fx);
+        status.textContent = "";
+      } catch {
+        if (isCurrent()) status.replaceChildren(displayButton("Повторить примерку", () => render(frame, card)));
+      }
+    }
+
+    return { element, render };
+  }
+
   async function openFramePicker(card, { frameId, onBack = openCardSheet } = {}) {
     haptic("light");
     const body = document.createElement("div");
@@ -2631,90 +2739,46 @@
     back.addEventListener("click", () => onBack(card));
     body.append(back, status);
     openSheet(`Рамка · ${card.name}`, body, null, () => onBack(card));
+    const isOpen = () => body.isConnected && !el("sheet").hidden;
 
     let frames;
     try {
       frames = await loadFramesCatalog();
     } catch (error) {
-      status.textContent = "Не удалось загрузить рамки.";
+      if (!isOpen()) return;
+      status.replaceChildren(displayButton("Повторить загрузку рамок", () => openFramePicker(card, { frameId, onBack })));
       showError(error);
       return;
     }
-    if (!body.isConnected || el("sheet").hidden) return;
-    const owned = [{ id: "classic", title: "Стандартная", rarity: card.rarity, available: 1 },
-      ...frames.filter((frame) => frame.owned)];
+    if (!isOpen()) return;
+    const classic = { id: "classic", title: "Эмаль", rarity: card.rarity, available: 1 };
+    const equipped = frames.find((frame) => frame.id === card.frame_style);
+    const owned = [classic, ...(equipped ? [equipped] : []), ...frames.filter((frame) => frame.owned && frame !== equipped)];
     const intro = document.createElement("p");
     intro.className = "hint";
-    intro.textContent = owned.length === 1
-      ? "У вас пока нет особых рамок. Их можно получить в магазине или в кейсе."
-      : "Каждый экземпляр можно надеть на одну карту. Чтобы вернуть рамку в инвентарь, выберите «Стандартная» и нажмите «Снять рамку».";
-    const visual = document.createElement("div");
-    visual.className = "frame-picker-preview";
+    intro.textContent = "У вас пока нет коллекционных рамок.";
+    const fitting = createFrameFitting(isOpen);
     const apply = document.createElement("button");
     apply.type = "button";
     apply.className = "btn btn-primary btn-block";
-    const grid = document.createElement("div");
-    grid.className = "frame-picker";
-    const options = new Map();
+    const gallery = createFrameGallery(owned, "frame-picker-choice", selectFrame);
     let selected;
-    let previewVersion = 0;
     let saving = false;
 
-    async function selectFrame(frame) {
-      if (saving || selected === frame) return;
+    function selectFrame(frame, reveal = false) {
+      if (saving) {
+        gallery.update(selected.id, card.frame_style);
+        return;
+      }
       selected = frame;
-      const version = ++previewVersion;
       const current = frame.id === card.frame_style;
-      for (const [id, option] of options) {
-        option.classList.toggle("selected", id === frame.id);
-        option.setAttribute("aria-pressed", String(id === frame.id));
-      }
-      apply.disabled = current || Boolean(card.lock_reason);
-      apply.textContent = current ? "Уже на карте" : frame.id === "classic" ? "Снять рамку" : "Надеть рамку";
-      visual.replaceChildren();
-      status.textContent = "Загружаем примерку…";
-      try {
-        const url = await loadCardImageUrl(card, "", frame.id);
-        if (version !== previewVersion || !body.isConnected) return;
-        const image = document.createElement("img");
-        image.src = url;
-        await image.decode();
-        if (version !== previewVersion || !body.isConnected) return;
-        image.alt = `${card.name} · ${frame.title}`;
-        visual.append(image);
-        const fx = frameEffects(frame, image);
-        if (fx) visual.append(fx);
-        status.textContent = current ? `Сейчас на карте: ${frame.title}` : `Примерка: ${frame.title}`;
-      } catch {
-        if (version === previewVersion) status.textContent = "Не удалось загрузить примерку.";
-      }
+      gallery.update(frame.id, card.frame_style, reveal);
+      apply.disabled = current || !frame.available || Boolean(card.lock_reason);
+      apply.textContent = current ? "Уже на карте" : !frame.available ? "Нет свободных экземпляров"
+        : frame.id === "classic" ? "Снять рамку" : "Надеть рамку";
+      fitting.render(frame, card);
     }
 
-    owned.forEach((frame) => {
-      const option = document.createElement("button");
-      option.type = "button";
-      option.className = "frame-option";
-      option.dataset.rarity = frame.rarity;
-      const current = frame.id === card.frame_style;
-      option.disabled = !current && !frame.available;
-      if (frame.preview_url) {
-        const thumbnail = document.createElement("img");
-        thumbnail.className = "frame-preview";
-        thumbnail.alt = "";
-        thumbnail.loading = "lazy";
-        thumbnail.src = frameAssetUrl(frame.preview_url);
-        option.append(thumbnail);
-      }
-      const title = document.createElement("strong");
-      title.textContent = frame.title;
-      const meta = document.createElement("span");
-      meta.className = "hint";
-      meta.textContent = current ? "На этой карте" : frame.id === "classic" ? "Без особой рамки" : frameStockLabel(frame);
-      option.append(title, meta);
-      option.addEventListener("click", () => selectFrame(frame));
-      options.set(frame.id, option);
-      grid.append(option);
-    });
     apply.addEventListener("click", async () => {
       if (saving || apply.disabled) return;
       saving = true;
@@ -2722,18 +2786,22 @@
       apply.textContent = "Сохраняем…";
       try {
         const updated = await equipFrame(card, selected);
-        if (body.isConnected && !el("sheet").hidden) onBack(updated);
+        if (isOpen()) onBack(updated);
       } catch (error) {
         showError(error);
-        if (body.isConnected && !el("sheet").hidden) openFramePicker(card, { frameId: selected.id, onBack });
+        if (isOpen()) openFramePicker(card, { frameId: selected.id, onBack });
       } finally {
         saving = false;
       }
     });
-    body.replaceChildren(back, intro, visual, status, grid, apply, frameShopButton(card));
-    const initial = owned.find((frame) => frame.id === frameId && (frame.available || frame.id === card.frame_style))
-      || owned.find((frame) => frame.id === card.frame_style) || owned[0];
-    selectFrame(initial);
+    const actions = document.createElement("div");
+    actions.className = "frame-picker-actions";
+    actions.append(back, frameShopButton(card));
+    body.replaceChildren(fitting.element, gallery.grid);
+    if (owned.length === 1) body.append(intro);
+    body.append(apply, actions);
+    selectFrame(owned.find((frame) => frame.id === frameId) || equipped || classic, true);
+    gallery.setClassicImage(card);
   }
 
   function frameStockLabel(frame) {
@@ -3839,6 +3907,7 @@
   }
 
   let framePreviewOptions = [];
+  let frameShopGallery;
 
   function previewFrameOnCard(frameId, frames, title) {
     closeSheet();
@@ -3850,62 +3919,29 @@
   function openFrameShopPreview(frames, title) {
     if (!frames.length) return;
     framePreviewOptions = frames;
-    const dialog = el("frame-shop-preview");
-    const select = el("frame-shop-frame");
-    select.replaceChildren(...frames.map((frame) => {
-      const label = frame.chance === undefined ? frame.title : `${frame.title} · ${frame.chance}%`;
-      return new Option(label, frame.id);
-    }));
-    select.value = state.frameShopFrameId;
-    if (select.selectedIndex < 0) select.selectedIndex = 0;
-    state.frameShopFrameId = select.value;
+    state.frameShopFrameId = (frames.find((frame) => frame.id === state.frameShopFrameId) || frames[0]).id;
+    frameShopGallery = createFrameGallery(frames, "frame-shop-choice", (frame) => {
+      state.frameShopFrameId = frame.id;
+      renderShopPreview();
+    });
+    el("frame-shop-gallery").replaceChildren(frameShopGallery.grid);
     el("frame-shop-preview-title").textContent = title;
-    dialog.showModal();
-    dialog.scrollTop = 0;
+    frameShopPreview.showModal();
+    frameShopPreview.scrollTop = 0;
     syncBackButton();
-    renderShopPreview();
+    renderShopPreview(true);
   }
 
-  async function renderShopPreview() {
-    const dialog = el("frame-shop-preview");
-    if (!dialog.open) return;
-    const version = ++state.framePreviewVersion;
-    const image = el("frame-shop-image");
-    const visual = el("frame-shop-visual");
-    visual.replaceChildren(image);
-    visual.hidden = true;
-    const status = el("frame-shop-preview-status");
+  function renderShopPreview(reveal = false) {
+    if (!frameShopPreview.open) return;
+    const frame = framePreviewOptions.find((item) => item.id === state.frameShopFrameId);
     const card = state.frameShopCards.find((item) => item.id === state.frameShopCardId);
     const manage = el("frame-shop-manage");
     manage.disabled = !card || Boolean(card.lock_reason);
     manage.hidden = !card;
     el("frame-shop-to-collection").hidden = Boolean(card);
-    image.hidden = true;
-    if (!card || !state.frameShopFrameId) {
-      status.textContent = card ? "Выберите рамку для примерки." : "Получите карту, чтобы примерить рамку.";
-      return;
-    }
-    status.textContent = "Загружаем примерку…";
-    try {
-      const url = await loadCardImageUrl(card, "", state.frameShopFrameId);
-      if (!dialog.open || version !== state.framePreviewVersion) return;
-      image.src = url;
-      await image.decode();
-      if (!dialog.open || version !== state.framePreviewVersion) return;
-      image.hidden = false;
-      visual.hidden = false;
-      const frame = framePreviewOptions.find((item) => item.id === state.frameShopFrameId);
-      const fx = frameEffects(frame, image);
-      if (fx) visual.append(fx);
-      status.textContent = frame
-        ? `Примерка: ${frame.title}${frame.id === card.frame_style ? " · На этой карте"
-          : frame.quantity !== undefined ? ` · ${frameStockLabel(frame)}` : ""}`
-        : "Примерка рамки";
-    } catch (error) {
-      if (dialog.open && version === state.framePreviewVersion) {
-        status.replaceChildren(displayButton("Повторить загрузку примерки", renderShopPreview));
-      }
-    }
+    frameShopGallery.update(frame.id, card?.frame_style, reveal);
+    shopFitting.render(frame, card);
   }
 
   function updateCaseButton() {
@@ -4327,6 +4363,8 @@
 
   el("frame-roulette-close").addEventListener("click", closeFrameRoulette);
   const frameShopPreview = el("frame-shop-preview");
+  const shopFitting = createFrameFitting(() => frameShopPreview.open);
+  el("frame-shop-fitting").append(shopFitting.element);
   el("frame-shop-try").addEventListener("click", async (event) => {
     const button = event.currentTarget;
     button.disabled = true;
@@ -4340,10 +4378,6 @@
   });
   el("frame-shop-preview-close").addEventListener("click", () => frameShopPreview.close());
   frameShopPreview.addEventListener("close", syncBackButton);
-  el("frame-shop-frame").addEventListener("change", (event) => {
-    state.frameShopFrameId = event.target.value;
-    renderShopPreview();
-  });
   el("frame-shop-card").addEventListener("change", (event) => {
     state.frameShopCardId = Number(event.target.value);
     renderShopPreview();

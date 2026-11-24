@@ -973,21 +973,19 @@
         <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
       </button>
     </div>
-    <label for="frame-shop-frame">Рамка</label>
-    <select id="frame-shop-frame"></select>
-    <label for="frame-shop-card">Карта</label>
-    <select id="frame-shop-card"></select>
+    <div class="frame-shop-card-field">
+      <label for="frame-shop-card">Карта</label>
+      <select id="frame-shop-card"></select>
+    </div>
     <div id="frame-shop-pages" class="frame-shop-pages" hidden>
       <button id="frame-shop-prev" class="btn btn-secondary" type="button" aria-label="Предыдущая страница карт">←</button>
       <span id="frame-shop-page" class="hint"></span>
       <button id="frame-shop-next" class="btn btn-secondary" type="button" aria-label="Следующая страница карт">→</button>
     </div>
-    <p id="frame-shop-preview-status" class="hint" role="status"></p>
-    <div id="frame-shop-visual" class="frame-shop-visual" hidden>
-      <img id="frame-shop-image" alt="Предпросмотр рамки на выбранной карте" hidden>
-    </div>
+    <div id="frame-shop-fitting"></div>
+    <div id="frame-shop-gallery"></div>
     <button id="frame-shop-manage" class="btn btn-primary btn-block" type="button" disabled>
-      Управлять рамками выбранной карты
+      Управлять рамками карты
     </button>
     <button id="frame-shop-to-collection" class="btn btn-secondary btn-block" type="button" hidden>
       Открыть первую карту
