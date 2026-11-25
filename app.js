@@ -32,20 +32,11 @@
   const appVersion = new URLSearchParams(location.search).get("v");
   const getInitData = () => window.Telegram?.WebApp?.initData || "";
 
-  // Запрещаем масштабирование (pinch/double-tap) и перетаскивание картинок.
-  const blockGesture = (event) => event.preventDefault();
-  ["gesturestart", "gesturechange", "gestureend"].forEach((type) => {
-    document.addEventListener(type, blockGesture, { passive: false });
-  });
-  document.addEventListener("touchmove", (event) => {
-    if (event.touches.length > 1) event.preventDefault();
-  }, { passive: false });
   document.addEventListener("dragstart", (event) => {
     if (event.target instanceof Element && event.target.closest("img")) {
       event.preventDefault();
     }
   });
-  document.addEventListener("dblclick", blockGesture, { passive: false });
   const configuredApiBase = document.querySelector('meta[name="mini-app-api"]')
     ?.content.trim() || "";
   const apiBase = configuredApiBase.startsWith("__")
@@ -84,6 +75,18 @@
     backgroundCatalogRequest: null, backgroundSaving: false, backgroundSaveVersion: 0,
   };
   const el = (id) => document.getElementById(id);
+  const viewport = window.visualViewport;
+  let keyboardInset = 0;
+  function updateKeyboardInset() {
+    const overlap = viewport && viewport.scale === 1
+      ? Math.max(0, Math.round(window.innerHeight - viewport.height - viewport.offsetTop)) : 0;
+    const next = overlap > 80 ? overlap : 0;
+    if (next === keyboardInset) return;
+    keyboardInset = next;
+    document.documentElement.style.setProperty("--keyboard-inset", `${next}px`);
+    document.documentElement.toggleAttribute("data-keyboard-open", next > 0);
+  }
+  viewport?.addEventListener("resize", updateKeyboardInset);
   const albums = { series: null, page: 1, listPage: 1, version: 0, favorites: false };
   const copies = { page: 1, version: 0, selected: new Map(), maxBatch: 0, busy: false };
   const pagePositions = new Map();
@@ -91,6 +94,7 @@
   let sheetBack = null;
   let sheetReturnFocus = null;
   let detailAnchor = null;
+  let infoPopupPreviousFocus = null;
   const playerPreference = (name, value) => {
     const id = state.profile?.id;
     if (!id) return null;
@@ -162,8 +166,8 @@
     if (lastTwo >= 11 && lastTwo <= 14) return many;
     return last === 1 ? one : last >= 2 && last <= 4 ? few : many;
   }
-  const cardWord = (count) => quantityForm(count, "карта", "карты", "карт");
-  const formatCardCount = (count) => `${count} ${cardWord(count)}`;
+  const cardWord = (count, singular = "карта") => quantityForm(count, singular, "карты", "карт");
+  const formatCardCount = (count, singular) => `${count} ${cardWord(count, singular)}`;
   const formatCrystalCount = (count) => `${count} ${quantityForm(count, "кристалл", "кристалла", "кристаллов")}`;
   const selectedCards = () => [...state.selected.values()];
   const hasCustomFrame = (card) => Boolean(card.frame_style && card.frame_style !== "classic");
@@ -257,7 +261,7 @@
     pendingOperation = operation;
     playerPreference("pending-operation", operation ? JSON.stringify(operation) : "");
     el("operation-recovery").hidden = !operation;
-    if (operation) el("operation-status").textContent = "Проверить результат последней операции";
+    el("operation-status").textContent = operation ? "Результат операции ещё не подтверждён." : "";
   }
 
   async function sendEconomyOperation(operation, verifyFirst) {
@@ -370,6 +374,7 @@
 
   function openInfoPopup(title, text) {
     const popup = el("info-popup");
+    if (popup.hidden) infoPopupPreviousFocus = document.activeElement;
     el("info-popup-title").textContent = title;
     el("info-popup-text").textContent = text;
     popup.hidden = false;
@@ -383,6 +388,9 @@
     popup.hidden = true;
     state.overlayOpen = false;
     syncBackButton();
+    const previous = infoPopupPreviousFocus;
+    infoPopupPreviousFocus = null;
+    if (previous?.isConnected) previous.focus({ preventScroll: true });
     const after = state.afterInfo;
     state.afterInfo = null;
     after?.();
@@ -426,7 +434,7 @@
     });
   }
 
-  function showShopDialog({ title, item, description, art, price, currency, success = false }) {
+  function showShopDialog({ title, item, description, art, price, currency, actionLabel, success = false }) {
     if (shopDialogResolve) return Promise.resolve(false);
     const dialog = el("shop-dialog");
     shopDialogPreviousFocus = document.activeElement;
@@ -443,12 +451,12 @@
       el("shop-dialog-amount").textContent = String(price);
       el("shop-dialog-currency-label").textContent = currency === "dust" ? "пыли" : "кристаллов";
     }
-    el("shop-dialog-confirm").textContent = success ? "Отлично" : "Подтвердить";
+    el("shop-dialog-confirm").textContent = success ? "Готово" : actionLabel;
     el("shop-dialog-cancel").hidden = success;
     dialog.classList.toggle("is-success", success);
     dialog.hidden = false;
     syncBackButton();
-    el("shop-dialog-confirm").focus();
+    el(success ? "shop-dialog-confirm" : "shop-dialog-cancel").focus({ preventScroll: true });
     return new Promise((resolve) => { shopDialogResolve = resolve; });
   }
 
@@ -470,10 +478,21 @@
     try { tg.MainButton.hide(); } catch (_error) { /* old clients */ }
   }
 
+  function activeCustomDialog() {
+    return document.querySelector("#shop-dialog:not([hidden])") ||
+      document.querySelector("#info-popup:not([hidden])") ||
+      document.querySelector("#frame-roulette:not([hidden])") ||
+      document.querySelector("#drop-overlay:not([hidden])") ||
+      document.querySelector("#sheet:not([hidden])");
+  }
+
   function syncBackButton() {
-    const open = !el("sheet").hidden || !el("drop-overlay").hidden ||
-      !el("frame-roulette").hidden || !el("info-popup").hidden || !el("shop-dialog").hidden ||
-      el("vip-history-dialog").open || el("frame-shop-preview").open ||
+    const custom = activeCustomDialog();
+    const native = el("vip-history-dialog").open || el("frame-shop-preview").open;
+    const modal = Boolean(custom || native);
+    document.querySelectorAll(".topbar, .app, .main-nav, #select-bar").forEach((region) => { region.inert = Boolean(custom); });
+    el("sheet").inert = modal && (native || custom !== el("sheet"));
+    const open = modal ||
       state.activePage === "player" || state.activePage === "showcases" ||
       (state.activePage === "collection" && state.collectionMode === "albums" && albums.series !== null);
     if (!tg?.BackButton) return;
@@ -519,8 +538,15 @@
 
   function setBalance(balance) {
     state.balance = balance;
-    el("balance").textContent = String(balance);
+    updateBalanceChip("balance", balance, "Пыль");
     renderEconomyStatus();
+  }
+  function updateBalanceChip(id, balance, label) {
+    const value = el(id);
+    const formatted = balance?.toLocaleString("ru-RU") ?? "—";
+    value.textContent = formatted;
+    value.parentElement.setAttribute("aria-label", `${label}: ${formatted}`);
+    value.parentElement.title = `${label}: ${formatted}`;
   }
   function setProfileAvatar(id, profile) {
     const avatar = el(id);
@@ -541,14 +567,14 @@
   }
   function setCrystals(balance) {
     state.crystals = balance;
-    el("crystals-balance").textContent = balance;
+    updateBalanceChip("crystals-balance", balance, "Кристаллы");
     el("crystal-shop-balance").textContent = formatCrystalCount(balance);
     updateRollShopButtons();
     updateCaseButton();
   }
   function setRolls(balance) {
     state.rolls = balance;
-    el("roll-balance").textContent = balance;
+    updateBalanceChip("roll-balance", balance, "Билеты");
     el("extra-roll-count").textContent = balance;
     el("home-ticket-panel").hidden = balance < 1;
     el("home-ticket-count").textContent = `${balance} ${ticketWord(balance)}`;
@@ -1103,7 +1129,7 @@
     single.textContent = first ? "Открыть первую карту" : free > 1 ? "Открыть одну" : "Открыть карту";
     single.disabled = !stock || !free || state.dropBusy;
     el("drop-all-button").disabled = !stock || !free || state.dropBusy;
-    el("drop-all-button").textContent = free > 0 ? `Открыть все · ${free}` : "Открыть все";
+    el("drop-all-button").textContent = free > 0 ? `Открыть ${formatCardCount(free, "карту")}` : "Открыть все";
     el("ticket-drop-button").disabled = !state.profile || state.rolls < 1 || state.dropBusy;
   }
 
@@ -1252,6 +1278,7 @@
 
   const dropMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   let dropSession = null;
+  let dropReturnFocus = null;
   function stopDropMotion() {
     if (!dropSession || dropSession.cancelled || el("drop-overlay").classList.contains("is-results")) return;
     dropSession.skipped = true;
@@ -1267,6 +1294,7 @@
 
   function startDropOpening({ gift = false, crafted = false } = {}) {
     const overlay = el("drop-overlay");
+    if (overlay.hidden) dropReturnFocus = document.activeElement;
     const session = { skipped: false, cancelled: false, wake: null, gift, crafted };
     dropSession = session;
     overlay.hidden = false;
@@ -1282,7 +1310,7 @@
     el("drop-to-results").hidden = true;
     el("drop-title").textContent = gift ? "Распаковываем подарок…" : crafted ? "Создаём карту…" : "Призываем карту…";
     el("drop-rarity").textContent = "";
-    el("drop-description").textContent = "Соединяемся со звёздами…";
+    el("drop-description").textContent = "Получаем результат…";
     el("drop-portal").setAttribute("aria-hidden", "true");
     el("drop-revealed-card").replaceChildren();
     el("drop-title").focus();
@@ -1304,6 +1332,9 @@
     el("drop-overlay").className = "drop-overlay";
     el("drop-sequence").replaceChildren();
     syncBackButton();
+    const previous = dropReturnFocus;
+    dropReturnFocus = null;
+    if (previous?.isConnected) previous.focus({ preventScroll: true });
   }
   function dropWait(session, milliseconds) {
     if (session.skipped || session.cancelled) return Promise.resolve();
@@ -1440,12 +1471,13 @@
     el("drop-title").textContent = dropSession?.crafted ? "Карта создана!"
       : single ? "Карта получена!" : `Получено карт: ${cards.length}`;
     el("drop-rarity").textContent = single ? cards[0].rarity_title : "";
-    el("drop-description").textContent = single ? "Карта сохранена в коллекции." : "Карты сохранены в коллекции.";
+    el("drop-description").textContent = "";
     el("drop-skip").hidden = true;
     el("drop-close").hidden = false;
     el("drop-followup").hidden = false;
     el("drop-dust").hidden = !single || Boolean(dropSession?.gift || dropSession?.first || dropSession?.crafted);
-    el("drop-to-collection").onclick = () => openDropCollection(cards, null);
+    el("drop-to-collection").textContent = single ? "Посмотреть карту" : "Посмотреть карты в коллекции";
+    el("drop-to-collection").onclick = () => openDropCollection(cards, single ? cards[0] : null);
     if (single) el("drop-dust").textContent = `Распылить за ${cards[0].dust_value} пыли`;
     el("drop-close").focus({ preventScroll: true });
     haptic("success");
@@ -1728,9 +1760,12 @@
     const count = duplicateMode ? copies.selected.size : cards.length;
     bar.hidden = state.activePage !== "collection" ||
       !(duplicateMode ? count > 0 : state.collectionMode === "cards" && state.selectMode);
-    el("select-review").textContent = `Распылить · Выбрано ${count}`;
+    el("select-count").textContent = `Выбранные карты · ${count}`;
+    el("select-review").textContent = "Распылить";
     el("select-review").disabled = count === 0 || copies.busy;
     bar.querySelectorAll("[data-select-action]").forEach((button) => { button.hidden = duplicateMode; });
+    bar.querySelector('[data-select-action="transfer"]').disabled = count === 0;
+    bar.querySelector('[data-select-action="sell"]').disabled = count !== 1;
   }
 
   function updateCollectionAvailability() {
@@ -1817,8 +1852,14 @@
   }
 
   function updateCollectionReset() {
-    el("collection-reset").hidden = !(
-      state.collectionFilter || state.collectionRarity || state.collectionQuery || state.collectionSort !== "new");
+    const filters = [
+      state.collectionQuery && `«${state.collectionQuery}»`,
+      COLLECTION_FILTERS.find(({ key }) => key && key === state.collectionFilter)?.title,
+      RARITIES.find(({ key }) => key && key === state.collectionRarity)?.title,
+      state.collectionSort !== "new" && SORTS.find(({ key }) => key === state.collectionSort)?.title,
+    ].filter(Boolean);
+    el("collection-applied-label").textContent = filters.join(" · ");
+    el("collection-applied").hidden = el("collection-reset").hidden = filters.length === 0;
   }
 
   function renderCollectionPages(id, data) {
@@ -2063,8 +2104,12 @@
     const estimate = cards.reduce((total, card) => total + card.dust_value, 0);
     const body = document.createElement("div");
     body.className = "collection-list";
+    const selectedByCharacter = new Map();
     for (const card of cards) {
-      const remain = card.owned_count - cards.filter((item) => item.character_id === card.character_id).length;
+      selectedByCharacter.set(card.character_id, (selectedByCharacter.get(card.character_id) || 0) + 1);
+    }
+    for (const card of cards) {
+      const remain = card.owned_count - selectedByCharacter.get(card.character_id);
       body.append(selectionReviewRow(card, `Останется: ${remain}`, () => {
         copies.selected.delete(card.id);
         const checkbox = el("collection-copy-items").querySelector(`[data-copy-id="${card.id}"]`);
@@ -2078,7 +2123,7 @@
     warning.className = "hint";
     warning.textContent = "Действие нельзя отменить.";
     const cancel = displayButton("Вернуться к выбору", closeSheet);
-    const confirm = displayButton(`Распылить · ${formatCardCount(cards.length)}`, async () => {
+    const confirm = displayButton(`Распылить ${formatCardCount(cards.length, "карту")}`, async () => {
       if (copies.busy) return;
       copies.busy = true;
       confirm.disabled = true;
@@ -2110,8 +2155,8 @@
     const reward = document.createElement("strong");
     reward.className = "dust-review-reward";
     reward.textContent = `+${estimate} пыли`;
-    body.prepend(confirm, reward, warning);
-    body.append(cancel);
+    body.prepend(reward, warning);
+    body.append(confirm, cancel);
     openSheet("Проверьте распыление", body);
   }
 
@@ -2135,12 +2180,12 @@
     summary.setAttribute("role", "status");
     const confirm = document.createElement("button");
     confirm.type = "button";
-    confirm.textContent = "Распылить";
+    confirm.textContent = `Распылить ${formatCardCount(cards.length, "карту")}`;
     confirm.className = "btn btn-danger btn-block";
     const reward = document.createElement("strong");
     reward.className = "dust-review-reward";
     reward.hidden = true;
-    body.append(confirm, reward, summary);
+    body.append(reward, summary);
     let estimate;
     let submitting = false;
     const rows = new Map();
@@ -2169,7 +2214,7 @@
       body.append(row);
     }
     const cancel = displayButton("Вернуться к выбору", () => { if (!submitting) closeSheet(); });
-    body.append(cleanup, cancel);
+    body.append(cleanup, confirm, cancel);
     confirm.addEventListener("click", async () => {
       if (confirm.disabled) return;
       submitting = true;
@@ -2212,7 +2257,7 @@
           : "Измените выбор карт."}`
           : [dustLossWarning(cards, result.remaining), "Действие нельзя отменить."].filter(Boolean).join(" ");
         cleanup.hidden = !blocked.size || !availableIds.size;
-        confirm.textContent = blocked.size ? "Распыление недоступно" : `Распылить · ${formatCardCount(cards.length)}`;
+        confirm.textContent = blocked.size ? "Распыление недоступно" : `Распылить ${formatCardCount(cards.length, "карту")}`;
         confirm.disabled = Boolean(blocked.size);
       } catch (error) {
         if (body.isConnected) summary.replaceChildren(displayButton("Повторить расчёт", load));
@@ -2253,17 +2298,14 @@
     el("sheet-backdrop").hidden = true;
     clearMainButton();
     syncBackButton();
-    if (detailAnchor && state.activePage === "collection") {
-      for (const anchor of el("collection-page").querySelectorAll(`[data-collection-card="${detailAnchor}"]`)) {
-        if (anchor.getClientRects().length) {
-          anchor.scrollIntoView({ block: "nearest" });
-          break;
-        }
-      }
-    }
+    const previous = sheetReturnFocus;
+    const fallback = detailAnchor && state.activePage === "collection"
+      ? [...el("collection-page").querySelectorAll(`[data-collection-card="${detailAnchor}"]`)]
+        .find((anchor) => anchor.getClientRects().length)
+      : null;
     detailAnchor = null;
-    sheetReturnFocus?.focus({ preventScroll: true });
     sheetReturnFocus = null;
+    (previous?.isConnected && previous.getClientRects().length ? previous : fallback)?.focus({ preventScroll: true });
   }
   function backFromSheet() {
     if (sheetBack) sheetBack();
@@ -2271,7 +2313,7 @@
   }
   function openSheet(title, body, main, back = null) {
     sheetBack = back;
-    sheetReturnFocus = null;
+    if (el("sheet").hidden) sheetReturnFocus = document.activeElement;
     el("toast").classList.remove("show");
     el("sheet").classList.remove("sheet--card");
     el("sheet-title").textContent = title;
@@ -2282,6 +2324,7 @@
     if (main) setMainButton(main.text, main.onClick);
     else clearMainButton();
     syncBackButton();
+    el("sheet-close").focus({ preventScroll: true });
   }
 
   function renderCardInspection(card, previousImageUrl) {
@@ -2558,31 +2601,36 @@
     }));
     el("frame-inventory-items").replaceChildren(...visible.map((frame) =>
       rewardTile(frame.title, frameAssetUrl(frame.preview_url),
-        `${frame.rarity_title} · ×${frame.quantity}`, frameStockLabel(frame), () => {
-          const body = document.createElement("div");
-          body.className = "reward-detail";
-          const stock = document.createElement("p");
-          stock.className = "hint";
-          stock.textContent = `${frame.rarity_title} · Всего: ${frame.quantity} · ${frameStockLabel(frame)}`;
-          body.append(rewardVisual(frameAssetUrl(frame.live_preview_url || frame.preview_url), frame), stock,
-            displayButton("Примерить на карте", () => previewFrameOnCard(frame.id, owned, "Мои рамки")));
-          if (frame.pack_id && frame.rarity === "rare" && !frame.case_only
-              && frame.quantity > 1 && frame.available > 0 && state.frameRecycle) {
-            const limit = state.frameRecycle;
-            if (limit.remaining) {
-              body.append(displayButton("Распылить лишнюю рамку", () => confirmFrameRecycle(frame)));
-            } else {
-              const note = document.createElement("p");
-              note.className = "hint";
-              note.textContent = `Лимит распыления исчерпан до ${localDateTime(limit.resets_at)}.`;
-              body.append(note);
-            }
-          }
-          openSheet(frame.title, body);
-        })));
+        `${frame.rarity_title} · ×${frame.quantity}`, frameStockLabel(frame), () => openInventoryFrame(frame, owned))));
   }
 
-  function confirmFrameRecycle(frame) {
+  function openInventoryFrame(frame, owned) {
+    const body = document.createElement("div");
+    body.className = "reward-detail reward-detail--frame";
+    const actions = document.createElement("div");
+    actions.className = "reward-detail-actions";
+    const stock = document.createElement("p");
+    stock.className = "hint";
+    stock.append(`${frame.rarity_title} · Всего: ${frame.quantity}`, document.createElement("br"), frameStockLabel(frame));
+    const tryOn = displayButton("Примерить", () => previewFrameOnCard(frame.id, owned, "Мои рамки"), false);
+    tryOn.setAttribute("aria-label", "Примерить на карте");
+    actions.append(stock, tryOn);
+    const limit = state.frameRecycle;
+    if (frame.pack_id && frame.rarity === "rare" && !frame.case_only && frame.quantity > 1 && frame.available > 0 && limit) {
+      if (limit.remaining) {
+        actions.append(displayButton("Распылить рамку", () => confirmFrameRecycle(frame, () => openInventoryFrame(frame, owned))));
+      } else {
+        const note = document.createElement("p");
+        note.className = "hint";
+        note.textContent = `Лимит распыления исчерпан до ${localDateTime(limit.resets_at)}.`;
+        actions.append(note);
+      }
+    }
+    body.append(rewardVisual(frameAssetUrl(frame.live_preview_url || frame.preview_url), frame), actions);
+    openSheet(frame.title, body);
+  }
+
+  function confirmFrameRecycle(frame, back) {
     const body = document.createElement("div");
     body.className = "wallet-actions";
     const reward = document.createElement("strong");
@@ -2591,7 +2639,7 @@
     const note = document.createElement("p");
     note.className = "hint";
     note.textContent = `Будет распылён один свободный экземпляр «${frame.title}». Осталось распылений на этой неделе: ${state.frameRecycle.remaining}.`;
-    const confirm = displayButton("Распылить", async () => {
+    const confirm = displayButton("Распылить 1 рамку", async () => {
       if (confirm.disabled) return;
       confirm.disabled = true;
       try {
@@ -2605,8 +2653,8 @@
       } finally { confirm.disabled = false; }
     });
     confirm.className = "btn btn-danger btn-block";
-    body.append(confirm, reward, note, displayButton("Отмена", closeSheet));
-    openSheet("Распыление рамки", body);
+    body.append(note, reward, confirm, displayButton("К рамке", back));
+    openSheet("Распыление рамки", body, null, back);
   }
 
   el("frame-inventory-available").addEventListener("change", () => renderFrameInventory());
@@ -2844,13 +2892,14 @@
     const body = document.createElement("div");
     const hint = document.createElement("p");
     hint.className = "hint";
-    hint.textContent = "Стартовая ставка · пыль";
+    hint.textContent = "Стартовая ставка в пыли. Лот будет доступен 24 часа.";
     const input = document.createElement("input");
     input.className = "field";
     input.type = "number";
     input.min = "1";
     input.step = "1";
     input.inputMode = "numeric";
+    input.setAttribute("aria-label", "Стартовая ставка в пыли");
     input.value = card.dust_value;
     el("auction-start-price").value = card.dust_value;
     body.append(hint, input);
@@ -2887,7 +2936,14 @@
     input.setAttribute("aria-label", "Сумма ставки в пыли");
     const row = document.createElement("div");
     row.className = "bid-row";
-    const setAmount = (value) => { input.value = Math.max(listing.minimum_bid, Math.ceil(value)); };
+    const updateAmount = () => {
+      const valid = Number.isSafeInteger(input.valueAsNumber) && input.valueAsNumber >= listing.minimum_bid;
+      local.textContent = valid ? `Поставить ${input.valueAsNumber.toLocaleString("ru-RU")} пыли` : "Поставить ставку";
+    };
+    const setAmount = (value) => {
+      input.value = Math.max(listing.minimum_bid, Math.ceil(value));
+      updateAmount();
+    };
     [["минимум", listing.minimum_bid],
       ["+5%", listing.minimum_bid * 1.05],
       ["+10%", listing.minimum_bid * 1.1]].forEach(([label, value]) => {
@@ -2911,14 +2967,13 @@
       }
       local.disabled = true;
       try {
-        if (!await confirmAction(
-          `Поставить ${bidAmount} пыли? Сумма будет зарезервирована до конца аукциона.`)) return;
+        local.textContent = "Отправляем ставку…";
         const result = await api(`/api/market/${listing.id}/bid`, {
           method: "POST",
           body: JSON.stringify({ amount: bidAmount }),
         });
         setBalance(result.balance);
-        closeSheet();
+        if (body.isConnected && !el("sheet").hidden) closeSheet();
         showNotice(`Ставка ${bidAmount} пыли принята.`);
         haptic("success");
         loadMarket().catch(showError);
@@ -2931,14 +2986,18 @@
           else openSheet(`Аукцион #${listing.id}`, listingCard(updated.listing));
           loadMarket().catch(showError);
         } catch (_refreshError) { showError(error); }
-      } finally { local.disabled = false; }
+      } finally { local.disabled = false; updateAmount(); }
     };
     const local = document.createElement("button");
     local.type = "button";
     local.className = "btn btn-primary btn-block";
-    local.textContent = "Подтвердить ставку";
+    const reserve = document.createElement("p");
+    reserve.className = "hint";
+    reserve.textContent = "Ставка резервируется до конца аукциона или пока её не перебьют.";
+    input.addEventListener("input", updateAmount);
+    updateAmount();
     local.addEventListener("click", submit);
-    body.append(balance, row, input, local);
+    body.append(balance, input, row, reserve, local);
     if (failure) {
       const notice = document.createElement("p");
       notice.className = "hint";
@@ -3110,7 +3169,9 @@
   function setMarketTab(name, initial = false) {
     state.marketTab = name;
     document.querySelectorAll("[data-market-tab]").forEach((button) => {
-      button.classList.toggle("active", button.dataset.marketTab === name);
+      const active = button.dataset.marketTab === name;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
     });
     el("market-pane").hidden = name !== "all";
     el("mine-pane").hidden = name !== "mine";
@@ -3152,7 +3213,7 @@
     try {
       if (!await showShopDialog({ title: "Билет за пыль", item: "1 билет",
         description: `Следующая покупка: ${localDateTime(state.profile.next_daily_reset)}.`, art: "ticket",
-        price: cost, currency: "dust" })) return;
+        price: cost, currency: "dust", actionLabel: "Купить 1 билет" })) return;
       const result = await api("/api/rolls/dust", { method: "POST", body: "{}" });
       setBalance(result.balance);
       setRolls(result.rolls);
@@ -3248,7 +3309,7 @@
     try {
       if (!await showShopDialog({ title: "Создание карты", item: character.name,
         description: `${character.series}. Следующее создание будет доступно через 7 дней.`,
-        art: "frame", price: character.price, currency: "dust" })) return;
+        art: "frame", price: character.price, currency: "dust", actionLabel: "Создать карту" })) return;
       const result = await api("/api/craft", { method: "POST",
         body: JSON.stringify({ character_id: character.id, rarity: character.rarity }) });
       state.profile.economy.craft_available = false;
@@ -3291,7 +3352,7 @@
       const upgradeMask = loadUpgradeMask(card);
       if (!await showShopDialog({ title: "Эффект иллюстрации", item: effect?.title || card.name,
         description: `${effect?.description || "Улучшение визуального эффекта."} Меняется только иллюстрация. Эффект передаётся с картой; при распылении стоимость улучшения не возвращается.`,
-        art: "frame", price, currency: "dust" })) return;
+        art: "frame", price, currency: "dust", actionLabel: "Улучшить карту" })) return;
       button.textContent = "Улучшаем карту…";
       const previewImage = button.closest("#sheet-body")?.querySelector(".sheet-card > img");
       const result = await api(`/api/cards/${card.id}/upgrade`, { method: "POST",
@@ -4087,9 +4148,9 @@
     updateCaseButton();
     const price = state.caseCatalog.price;
     const confirmed = await showShopDialog({
-      title: "Подтверждение покупки", item: "Премиум-кейс",
+      title: "Премиум-кейс", item: "",
       description: "Внутри пыль, билеты или коллекционная рамка.",
-      art: "case", price, currency: "crystal",
+      art: "case", price, currency: "crystal", actionLabel: "Открыть кейс",
     });
     if (!confirmed || state.caseCatalog?.price !== price) {
       state.caseOpening = false;
@@ -4350,7 +4411,7 @@
     try {
       if (!await showShopDialog({ title: "Открыть пак рамок", item: pack.title,
         description: `Одна рамка. ${pack.items.map((frame) => `${frame.title} — ${frame.chance}%`).join(", ")}.`,
-        art: "frame", price, currency: currency === "dust" ? "dust" : "crystal" })) return;
+        art: "frame", price, currency: currency === "dust" ? "dust" : "crystal", actionLabel: "Открыть пак" })) return;
       const overlay = showRoulette(pack.title, "Открываем пак…", frameAssetUrl(pack.cover_url));
       let result;
       try {
@@ -4726,9 +4787,9 @@
     updateRollShopButtons();
     try {
       const confirmed = await showShopDialog({
-        title: "Подтверждение покупки", item: `${amount} ${ticketWord(amount)}`,
+        title: "Покупка билетов", item: "",
         description: `После покупки останется ${state.crystals - price} кристаллов.`,
-        art: "ticket", price, currency: "crystal",
+        art: "ticket", price, currency: "crystal", actionLabel: `Купить ${amount} ${ticketWord(amount)}`,
       });
       if (!confirmed) return;
       if (price !== amount * state.rollCrystalCost) {
@@ -4802,7 +4863,7 @@
       state.transferSubmitting = link.disabled = true;
       try {
         const warning = frameHandoffWarning(cards);
-        if (!await confirmAction(`Создать ссылку передачи? ${warning}`.trim())) return;
+        if (!await confirmAction(`Передать ${formatCardCount(cards.length, "карту")} по ссылке? Карты получит игрок, который примет передачу. ${warning}`)) return;
         const result = await api("/api/transfers", {
           method: "POST",
           body: JSON.stringify({ card_ids: cards.map(({ id }) => id) }),
@@ -5030,7 +5091,7 @@
     }
     state.listingSubmitting = true;
     try {
-      if (!await confirmAction(`Выставить карту на аукцион? ${frameHandoffWarning(cards)}`)) return;
+      if (!await confirmAction(`Выставить «${card.name}» со стартовой ставкой ${price.toLocaleString("ru-RU")} пыли? ${frameHandoffWarning(cards)}`)) return;
       await api("/api/listings", {
         method: "POST",
         body: JSON.stringify({ card_id: card.id, starting_price: price }),
@@ -5065,7 +5126,22 @@
     reviewSelectedCards();
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !el("vip-history-dialog").open && !frameShopPreview.open) {
+    if (el("vip-history-dialog").open || frameShopPreview.open) return;
+    if (event.key === "Tab") {
+      const dialog = activeCustomDialog();
+      if (!dialog) return;
+      const controls = [...dialog.querySelectorAll("button, input, select, textarea, summary, a[href], [tabindex]")]
+        .filter((control) => control.tabIndex >= 0 && !control.matches(":disabled") && control.getClientRects().length);
+      const first = controls[0];
+      const last = controls.at(-1);
+      if (!first) return;
+      const current = document.activeElement;
+      if (!dialog.contains(current) || (event.shiftKey ? current === first : current === last)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      }
+    }
+    if (event.key === "Escape") {
       if (!el("shop-dialog").hidden) closeShopDialog(false);
       else if (!el("info-popup").hidden) closeInfoPopup();
       else if (!el("frame-roulette").hidden) closeFrameRoulette();
@@ -5087,15 +5163,6 @@
   el("shop-dialog-backdrop").addEventListener("click", () => closeShopDialog(false));
   el("shop-dialog-cancel").addEventListener("click", () => closeShopDialog(false));
   el("shop-dialog-confirm").addEventListener("click", () => closeShopDialog(true));
-  el("shop-dialog").addEventListener("keydown", (event) => {
-    if (event.key !== "Tab") return;
-    const controls = [...el("shop-dialog").querySelectorAll("button:not([hidden]):not(:disabled)")];
-    if (!controls.length) return;
-    const first = controls[0];
-    const last = controls[controls.length - 1];
-    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-  });
   el("sheet-close").addEventListener("click", closeSheet);
   el("sheet-backdrop").addEventListener("click", closeSheet);
   el("sheet-body").addEventListener("click", (event) => {
@@ -5120,8 +5187,11 @@
     const confirming = trade?.viewer_is_sender;
     const terms = confirming ? [...trade.sender_cards, ...trade.recipient_cards]
       : trade ? [...cards, ...trade.sender_cards] : cards;
-    const prompt = confirming ? "Подтвердить обмен этими картами? Отменить его будет нельзя."
-      : trade ? "Отправить выбранные карты на подтверждение автора?" : "Создать ссылку обмена?";
+    const offered = confirming ? trade.sender_cards.length : cards.length;
+    const received = confirming ? trade.recipient_cards.length : trade?.sender_cards.length;
+    const prompt = trade ? `Вы отдаёте ${formatCardCount(offered, "карту")} и получаете ${formatCardCount(received, "карту")}. ${confirming
+      ? "Завершить обмен? Его нельзя отменить." : "Отправить предложение на подтверждение?"}`
+      : `Создать ссылку обмена на ${formatCardCount(offered, "карту")}? Получатель предложит встречные карты.`;
     state.tradeSubmitting = true;
     el("primary").disabled = true;
     el("cancel").disabled = true;
@@ -5465,15 +5535,12 @@
     article.className = "showcase-art";
     article.dataset.theme = item.theme;
     const header = document.createElement("header");
-    const kicker = document.createElement("span");
-    kicker.className = "showcase-kicker";
-    kicker.textContent = "CHIZU · CURATED COLLECTION";
     const title = document.createElement("h2");
     title.textContent = item.title || "Моя витрина";
     const subtitle = document.createElement("span");
     subtitle.className = "showcase-subtitle";
     subtitle.textContent = `${displayThemes[item.theme]} · ${formatCardCount(item.card_count ?? item.cards.length)}`;
-    header.append(kicker, title, subtitle);
+    header.append(title, subtitle);
     article.append(header);
     const grid = document.createElement("div");
     grid.className = "showcase-grid";
@@ -5507,13 +5574,9 @@
     if (!item.cards.length) {
       const empty = document.createElement("p");
       empty.className = "empty-state";
-      empty.textContent = editing ? "Выберите карты ниже — здесь появится ваша композиция." : "В этой витрине пока нет карт.";
+      empty.textContent = editing ? "Добавьте карты из коллекции." : "В этой витрине пока нет карт.";
       article.append(empty);
     }
-    const footer = document.createElement("div");
-    footer.className = "showcase-footer";
-    footer.textContent = "✦ CHIZU GALLERY ✦";
-    article.append(footer);
     return article;
   }
 
@@ -5570,6 +5633,8 @@
     el("showcase-title").value = displayState.draft.title;
     el("showcase-theme").value = displayState.draft.theme;
     el("showcase-public").checked = displayState.draft.is_public;
+    updateShowcaseVisibilityHint();
+    el("showcase-preview").closest("details").open = false;
     el("showcase-search").value = "";
     setDisplayMode("editor");
     renderDisplayDraft();
@@ -5581,6 +5646,12 @@
     el("showcase-preview").replaceChildren(renderDisplay(draft, true));
     el("showcase-selected-count").textContent = `${draft.cards.length} / 9`;
     el("showcase-save").disabled = displayState.busy || !draft.cards.length || !draft.title.trim();
+  }
+
+  function updateShowcaseVisibilityHint() {
+    el("showcase-privacy-hint").textContent = el("showcase-public").checked
+      ? "По ссылке будут видны выбранные карты, даже если профиль закрыт."
+      : "Только вы видите эту витрину.";
   }
 
   function renderDisplayPicker() {
@@ -5665,6 +5736,7 @@
     displayState.draft.theme = el("showcase-theme").value;
     renderDisplayDraft();
   });
+  el("showcase-public").addEventListener("change", updateShowcaseVisibilityHint);
   el("showcase-search-button").addEventListener("click", () => loadDisplayPicker(1).catch(showError));
   el("showcase-search").addEventListener("keydown", (event) => {
     if (event.key === "Enter") { event.preventDefault(); loadDisplayPicker(1).catch(showError); }

@@ -23,6 +23,7 @@
     document.body.replaceChildren(...(loader ? [loader, root] : [root]));
     window.ChizuLoader?.finish();
     document.body.className = "monitor-page";
+    updateScrollableTables();
   };
   css.onload = mount;
   css.onerror = () => window.ChizuLoader?.fail("Не удалось загрузить оформление мониторинга.");
@@ -46,7 +47,24 @@
     disk_space: "Свободно меньше 512 МБ", notification_backlog: "Уведомления ожидают больше 15 минут", server_errors: "10 и более технических ошибок за 5 минут"};
   const tile = (name, value, detail = "") => `<article class="metric"><span>${esc(name)}</span><strong>${esc(value)}</strong><small>${esc(detail)}</small></article>`;
   const section = (title, content, note = "") => `<section><h2>${esc(title)}</h2>${note ? `<p class="muted">${esc(note)}</p>` : ""}${content}</section>`;
-  const table = (headers, rows) => rows.length ? `<div class="table-scroll"><table><thead><tr>${headers.map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(v => `<td>${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : `<p class="muted">За этот период данных пока нет.</p>`;
+  const table = (headers, rows) => rows.length ? `<div class="table-scroll"><table><thead><tr>${headers.map(h => `<th scope="col">${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(v => `<td>${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : `<p class="muted">За этот период данных пока нет.</p>`;
+  function updateScrollableTables() {
+    root.querySelectorAll(".table-scroll").forEach((region) => {
+      const horizontal = region.scrollWidth > region.clientWidth + 1;
+      const vertical = region.scrollHeight > region.clientHeight + 1;
+      region.classList.toggle("table-scroll--wide", horizontal);
+      if (horizontal || vertical) {
+        region.tabIndex = 0;
+        region.setAttribute("role", "region");
+        const title = region.closest("section").querySelector("h2").textContent;
+        region.setAttribute("aria-label", horizontal ? `${title}. Таблицу можно прокручивать вправо и влево.` : title);
+      } else {
+        region.removeAttribute("tabindex");
+        region.removeAttribute("role");
+        region.removeAttribute("aria-label");
+      }
+    });
+  }
   function chart(title, rows, start, days) {
     const map = new Map(rows.map(r => [r.day, r.count]));
     const values = Array.from({length: days}, (_, i) => ({day: start + i * 86400, count: map.get(start + i * 86400) || 0}));
@@ -88,6 +106,7 @@
       ${section("VPS и процесс", `<div class="metrics">${tile("CPU процесса", `${n(system.process_cpu_percent)}%`, "100% = одно ядро")}${tile("Память процесса", bytes(system.rss_bytes))}${tile("Свободно на диске", bytes(system.disk_free_bytes))}${tile("Размер game.db", bytes(system.game_db_bytes))}${tile("Свободная RAM VPS", bytes(system.host_memory_available_bytes))}${tile("Load average VPS", system.load_average?.map(n).join(" / ") || "—", "За 1 / 5 / 15 минут")}${tile("Последняя копия БД", age(system.backup_age_sec), system.backup_age_sec == null ? "Резервная копия не найдена" : "Возраст")}${tile("Потерянные замеры", n(runtime.dropped_samples), "При переполнении очереди или сбое записи")}${tile("Последний запуск", date(runtime.started_at))}${tile("Ответ polling Telegram", runtime.last_poll_at ? date(runtime.last_poll_at) : "Ожидается")}</div>` + systemChart(d.system_series) + table(["Задача", "Последний результат", "Время UTC"], Object.entries(runtime.tasks).map(([name, task]) => [name, task.ok ? "Успешно" : "Ошибка", date(task.at)])), `Системный снимок: ${snap.at ? date(snap.at) : "ожидается"}. Linux показывает RAM и load average; на других ОС часть значений недоступна. История нагрузки сохраняется в monitoring.db.`)}
       ${section("Очередь уведомлений", `<div class="metrics">${tile("Ожидают", n(q.pending || 0))}${tile("Отправляются", n(q.sending || 0))}${tile("Повторные попытки", n(q.retries || 0))}${tile("Не доставлены", n(q.failed || 0))}${tile("Самое старое готовое", age(q.oldest_age_sec || 0))}</div>`)}
       ${section("Историческая активность", chart("Игроки с игровыми событиями", d.historical_activity, d.start, d.days), "Восстановлено из журнала игровых операций. Не включает простые посещения и административные начисления; отличается от показателя активных пользователей.")}`;
+    requestAnimationFrame(updateScrollableTables);
   }
   let loading = false, controller;
   async function request(path) {
@@ -131,7 +150,10 @@
     } catch (error) { $("mon-message").textContent = error.message; }
     finally { loading = false; $("mon-export").disabled = false; $("mon-days").disabled = false; }
   };
-  const timer = setInterval(refresh, 60000);
+  const timer = setInterval(() => {
+    if (!document.activeElement?.closest(".table-scroll")) refresh();
+  }, 60000);
+  window.addEventListener("resize", updateScrollableTables);
   document.addEventListener("visibilitychange", () => { if (document.hidden) controller?.abort(); else refresh(); });
   window.addEventListener("pagehide", () => {clearInterval(timer); controller?.abort();}, {once: true});
   refresh();
