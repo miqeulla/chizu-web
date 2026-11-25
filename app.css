@@ -2825,16 +2825,24 @@ body:has(.sheet.sheet--card) .sheet-backdrop {
   width: min(60vw, 224px, 27vh);
   animation: card-focus-rise .55s cubic-bezier(.16, .84, .28, 1) both;
 }
-.sheet.sheet--card .sheet-card {
+.card-inspect-visual .sheet-card {
   width: 100%;
   margin: 0;
+  background: transparent;
+  box-shadow: none;
   pointer-events: auto;
+}
+.card-inspect-visual .sheet-card > img { background: transparent; }
+.card-inspect-visual .sheet-card::before { display: none; }
+.card-inspect-visual::after,
+.card-inspect-visual :is(.card-tint, .card-fx) {
+  -webkit-mask: var(--card-inspect-image, linear-gradient(transparent, transparent)) center / 100% 100% no-repeat;
+  mask: var(--card-inspect-image, linear-gradient(transparent, transparent)) center / 100% 100% no-repeat;
 }
 .card-inspect-visual::after {
   position: absolute;
-  inset: 1px;
+  inset: 0;
   z-index: 2;
-  border-radius: 10px;
   background: linear-gradient(115deg, transparent 35%, #fff7 49%, transparent 65%) 100% 0 / 240% 100%;
   content: "";
   pointer-events: none;
@@ -4526,12 +4534,10 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 .frame-live-fx[data-theme="neon"] .frame-fx-corner > img,
 .frame-live-fx[data-theme="gothic"] .frame-fx-corner > img { animation-name: frame-ornament-crystal; }
 .frame-live-fx[data-theme="ocean"] .frame-fx-corner > img { animation-name: frame-ornament-wave; animation-duration: 4s; }
-.sheet-card .frame-fx-corner > img, .card:hover .frame-fx-corner > img,
-.card:focus-visible .frame-fx-corner > img, .sheet:not([hidden]) .frame-fitting-visual .frame-fx-corner > img,
-.sheet:not([hidden]) .reward-visual .frame-fx-corner > img,
-.frame-shop-preview[open] .frame-fx-corner > img,
-.frame-roulette-overlay:not([hidden]) .frame-fx-corner > img { animation-play-state: running; }
-.page-hidden .frame-fx-corner > img { animation-play-state: paused !important; }
+:is(.sheet-card, .card:hover, .card:focus-visible, .sheet:not([hidden]) .frame-fitting-visual,
+    .sheet:not([hidden]) .reward-visual, .frame-shop-preview[open], .frame-roulette-overlay:not([hidden]))
+  :is(.frame-fx-corner > img, .frame-live-fx--mist .frame-fx-corner) { animation-play-state: running; }
+.page-hidden :is(.frame-fx-corner > img, .frame-live-fx--mist .frame-fx-corner) { animation-play-state: paused !important; }
 .frame-roulette-award { position: relative; width: 112px; margin-inline: auto; border-radius: 9px; }
 .frame-roulette-overlay:not([hidden]) .frame-live-fx::before,
 .frame-roulette-overlay:not([hidden]) .frame-live-fx::after,
@@ -4698,8 +4704,59 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 .frame-live-fx:is([data-theme="pudding_parade"], [data-theme="plush_dreams"], [data-theme="frog_post"], [data-theme="manga_club"]) .frame-fx-corner > img {
   animation-name: frame-ornament-bounce; animation-duration: 2.8s;
 }
-.frame-live-fx:is([data-theme="miracle_transformation"], [data-theme="watercolor_wind"], [data-theme="mist_fox_spirits"]) .frame-fx-corner > img {
+.frame-live-fx:is([data-theme="miracle_transformation"], [data-theme="watercolor_wind"]) .frame-fx-corner > img {
   animation-name: frame-ornament-drift; animation-duration: 4.6s;
+}
+.frame-live-fx--mist::before, .frame-live-fx--mist::after { display: none; }
+.frame-live-fx--mist .frame-fx-corner {
+  -webkit-mask: var(--frame-ornament-image) center / 100% 100% no-repeat;
+  mask: var(--frame-ornament-image) center / 100% 100% no-repeat;
+  background: linear-gradient(132deg, transparent 34%, #7bead875 45%, #e3fdff 52%, #95b4ff70 59%, transparent 68%) 100% center / 240% 100% no-repeat;
+  mix-blend-mode: screen;
+  animation: frame-mist-light 5.6s ease-in-out infinite paused;
+}
+.frame-live-fx--mist .frame-fx-corner:nth-child(2) { animation-delay: -3.4s; }
+.frame-live-fx--mist .frame-fx-corner:nth-child(3) { animation-delay: -.6s; }
+.frame-live-fx--mist .frame-fx-corner:nth-child(4) { animation-delay: -4.6s; }
+@keyframes frame-mist-light {
+  0% { background-position: 100% center; opacity: 0; }
+  30%, 62% { opacity: .72; }
+  85%, 100% { background-position: 0% center; opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .frame-live-fx--mist .frame-fx-corner { display: none; }
+}
+.frame-live-fx--masked::after { display: none; }
+.frame-live-fx--masked::before {
+  -webkit-mask: var(--frame-light-mask) center / 100% 100% no-repeat;
+  mask: var(--frame-light-mask) center / 100% 100% no-repeat;
+  border-radius: 0;
+  filter: none;
+  mix-blend-mode: screen;
+  background: linear-gradient(168deg, transparent 38%, var(--fx-color) 49%, #e6fff8 51%, transparent 62%) center 100% / 130% 240% no-repeat;
+  animation: frame-strata-light 5.4s linear infinite paused;
+}
+.frame-live-fx--strata_chronicle.frame-live-fx--tier-sr::before { --fx-color: #ffc974; }
+.frame-live-fx--shadow_stage::before {
+  background: radial-gradient(ellipse, #fff6df 0%, #ffc678 28%, transparent 66%) 0% 0% / 145% 100% no-repeat;
+  animation-name: frame-shadow-light;
+  animation-duration: 7.2s;
+  animation-timing-function: ease-in-out;
+}
+.frame-live-fx--masked { --frame-light-opacity: .65; }
+.frame-live-fx--masked.frame-live-fx--tier-ssr { --frame-light-opacity: .92; }
+@keyframes frame-strata-light {
+  0% { background-position: center 100%; opacity: 0; }
+  25%, 68% { opacity: var(--frame-light-opacity); }
+  88%, 100% { background-position: center 0%; opacity: 0; }
+}
+@keyframes frame-shadow-light {
+  0%, 100% { background-position: 0% 0%; opacity: calc(var(--frame-light-opacity) * .2); }
+  45% { background-position: 100% 0%; opacity: var(--frame-light-opacity); }
+  68% { opacity: calc(var(--frame-light-opacity) * .45); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .frame-live-fx--masked::before { display: none; }
 }
 .frame-live-fx[data-theme="matsuri_night"] .frame-fx-corner > img { animation-name: frame-ornament-lantern; animation-duration: 3.2s; }
 .frame-live-fx[data-theme="threads_of_fate"] .frame-fx-corner > img { animation-name: frame-ornament-reflection; animation-duration: 2.4s; }

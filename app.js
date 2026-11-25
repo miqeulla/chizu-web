@@ -732,7 +732,8 @@
   function frameEffects(frame, art) {
     if (!frame) return null;
     const { effect, rarity: frameRarity, accent, ornament_url: ornamentUrl, style: theme,
-      motion_url: motionUrl, rarity_badge_box: badgeBox, portrait_layout: portraitLayout } = frame;
+      motion_url: motionUrl, light_mask_url: lightMaskUrl, rarity_badge_box: badgeBox,
+      portrait_layout: portraitLayout } = frame;
     if (!effect || (!motionUrl && !/^[a-z_]+$/.test(effect))) return null;
     const fx = document.createElement("span");
     fx.setAttribute("aria-hidden", "true");
@@ -743,6 +744,15 @@
       import(moduleUrl.href)
         .then(({ mountFrameMotion }) => mountFrameMotion(fx, effect, frameAssetUrl(motionUrl), badgeBox, portraitLayout))
         .catch(() => fx.remove());
+      return fx;
+    }
+    const premium = frameRarity === "legendary" || frameRarity === "mythical";
+    fx.className = `frame-live-fx frame-live-fx--${effect} frame-live-fx--tier-${premium ? "ssr" : frameRarity === "epic" ? "sr" : "r"}`;
+    fx.dataset.theme = theme || "";
+    if (accent) fx.style.setProperty("--fx-color", accent);
+    if (lightMaskUrl) {
+      fx.classList.add("frame-live-fx--masked");
+      fx.style.setProperty("--frame-light-mask", `url("${frameAssetUrl(lightMaskUrl)}")`);
       return fx;
     }
     if (portraitLayout?.size) {
@@ -757,10 +767,6 @@
         `${x(left)} ${y(top)}, ${x(left)} ${y(bottom + 1)}, ${x(right + 1)} ${y(bottom + 1)}, ${x(right + 1)} ${y(top)}, ${x(left)} ${y(top)}`);
       fx.style.clipPath = `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${holes.join(", 0 0, ")})`;
     }
-    const premium = frameRarity === "legendary" || frameRarity === "mythical";
-    fx.className = `frame-live-fx frame-live-fx--${effect} frame-live-fx--tier-${premium ? "ssr" : frameRarity === "epic" ? "sr" : "r"}`;
-    fx.dataset.theme = theme || "";
-    if (accent) fx.style.setProperty("--fx-color", accent);
     if (typeof art === "string") {
       fx.style.setProperty("--frame-image", `url("${art}")`);
     } else if (art) {
@@ -771,14 +777,21 @@
       art.addEventListener("load", updateSilhouette, { once: true });
     }
     if (premium && ornamentUrl) {
+      const mist = theme === "mist_fox_spirits";
+      if (mist) fx.classList.add("frame-live-fx--mist");
       for (let corner = 0; corner < 4; corner += 1) {
         const mount = document.createElement("span");
         mount.className = "frame-fx-corner";
-        const image = document.createElement("img");
-        image.src = frameAssetUrl(ornamentUrl.replace(".webp", `_${corner}.webp`));
-        image.style.setProperty("--ornament-origin", ["25% 25%", "75% 25%", "25% 75%", "75% 75%"][corner]);
-        image.alt = "";
-        mount.append(image);
+        const url = frameAssetUrl(ornamentUrl.replace(".webp", `_${corner}.webp`));
+        if (mist) {
+          mount.style.setProperty("--frame-ornament-image", `url("${url}")`);
+        } else {
+          const image = document.createElement("img");
+          image.src = url;
+          image.style.setProperty("--ornament-origin", ["25% 25%", "75% 25%", "25% 75%", "75% 75%"][corner]);
+          image.alt = "";
+          mount.append(image);
+        }
         fx.append(mount);
       }
     }
@@ -894,7 +907,8 @@
     const image = document.createElement("img");
     image.alt = "";
     image.loading = "lazy";
-    image.src = previousImageUrl || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 3'%3E%3Crect width='2' height='3' fill='%23181427'/%3E%3C/svg%3E";
+    const placeholderFill = inspect ? "none" : "%23181427";
+    image.src = previousImageUrl || `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 3'%3E%3Crect width='2' height='3' fill='${placeholderFill}'/%3E%3C/svg%3E`;
     button.append(image);
     if (card.rarity === "mythical") {
       const tint = document.createElement("span");
@@ -904,9 +918,10 @@
     }
     const effects = cardEffects(card.rarity);
     if (effects) button.append(effects);
-    const frameFx = frameEffects({
+    const frameFx = !inspect && card.frame_light_mask_url ? null : frameEffects({
       effect: card.frame_effect, rarity: card.frame_rarity, accent: card.frame_accent,
       ornament_url: card.frame_ornament_url, style: card.frame_theme,
+      light_mask_url: card.frame_light_mask_url,
       motion_url: inspect ? card.frame_motion_url : null, rarity_badge_box: card.frame_rarity_badge_box,
       portrait_layout: card.frame_portrait_layout,
     }, image);
@@ -1583,8 +1598,7 @@
         }
         if (state.selectMode) {
           if (state.collectionSelected.has(card.id)) state.collectionSelected.delete(card.id);
-          else if (state.collectionSelected.size < 10) state.collectionSelected.set(card.id, card);
-          else showToast("Можно выбрать до 10 карт.");
+          else state.collectionSelected.set(card.id, card);
           if (!state.collectionSelected.size) state.selectMode = false;
           renderCollectionSelection();
           renderCollection();
@@ -1697,7 +1711,7 @@
   function renderCollectionSelection() {
     const cards = [...state.collectionSelected.values()];
     const oneCard = cards.length === 1;
-    el("selection-label").textContent = `Выбрано: ${cards.length} / 10`;
+    el("selection-label").textContent = `Выбрано: ${cards.length}`;
     el("dust-selected").disabled = cards.length === 0;
     el("sell-selected").disabled = !oneCard;
     const startPrice = el("auction-start-price");
@@ -2161,7 +2175,7 @@
       submitting = true;
       body.querySelectorAll("button").forEach((button) => { button.disabled = true; });
       try {
-        if (await dustSelected(estimate)) {
+        if (await dustSelected(cards, estimate)) {
           if (body.isConnected) closeSheet();
         } else if (body.isConnected) {
           await load();
@@ -2178,7 +2192,10 @@
       reward.hidden = true;
       summary.textContent = "Проверяем карты…";
       try {
-        const result = await api(`/api/dust/preview?cards=${cards.map((card) => card.id).join(",")}`);
+        const result = await api("/api/dust/preview", {
+          method: "POST",
+          body: JSON.stringify({ card_ids: cards.map((card) => card.id) }),
+        });
         if (!body.isConnected) return;
         const blocked = new Map(result.protected.map((id) => [id, "Защищена от распыления"]));
         availableIds = new Set(cards.filter((card) => !blocked.has(card.id)).map((card) => card.id));
@@ -2208,7 +2225,7 @@
 
   function dustLossWarning(cards, remaining) {
     const warnings = [];
-    if (Object.values(remaining).some((count) => count === 0)) warnings.push("Среди выбранных есть последние экземпляры.");
+    if (Object.values(remaining).some((count) => count === 0)) warnings.push("Последние экземпляры выбранных персонажей исчезнут из коллекции.");
     if (cards.some((card) => card.frame_style && card.frame_style !== "classic")) warnings.push("Закреплённые коллекционные рамки исчезнут.");
     if (cards.some((card) => card.upgrade_level > 0)) warnings.push("Улучшения исчезнут без возврата пыли.");
     return warnings.join(" ");
@@ -2274,6 +2291,10 @@
     preview.setAttribute("aria-disabled", "true");
     const presentation = document.createElement("div");
     presentation.className = "card-inspect-visual";
+    const image = preview.querySelector("img");
+    image.addEventListener("load", () => {
+      presentation.style.setProperty("--card-inspect-image", `url("${image.currentSrc}")`);
+    });
     presentation.append(preview);
     return presentation;
   }
@@ -4380,7 +4401,7 @@
     try {
       await loadFrameShopCards(1);
       if (state.activePage === "crystals" && state.shopTab === "frames") {
-        openFrameShopPreview(state.shopFrames, "Примерка рамок");
+        openFrameShopPreview(state.shopFrames.filter((frame) => !frame.retired_pack), "Примерка рамок");
       }
     } catch (error) { showError(error); }
     finally { button.disabled = !state.shopFrames.length; }
@@ -4742,8 +4763,7 @@
     setBalance(result.balance);
   }
 
-  async function dustSelected(estimate) {
-    const cards = [...state.collectionSelected.values()];
+  async function dustSelected(cards, estimate) {
     if (!cards.length || !Number.isInteger(estimate)) return;
     try {
       const result = await api("/api/dust", {
@@ -4767,6 +4787,10 @@
 
   function openTransferComposer(cards, back = null) {
     if (!cards.length) return;
+    if (cards.length > 10) {
+      showToast("За одну передачу можно выбрать не больше 10 карт.");
+      return;
+    }
     const card = cards.length === 1 ? cards[0] : null;
     const body = document.createElement("section");
     body.className = "transfer-composer";
@@ -5319,7 +5343,7 @@
   el("collection-select").addEventListener("click", () => {
     state.selectMode = true;
     renderCollectionSelection();
-    showToast("Нажмите на карты, чтобы выбрать до 10.");
+    showToast("Нажмите на карты, которые хотите выбрать.");
   });
   el("select-cancel").addEventListener("click", () => {
     if (state.collectionMode === "duplicates") {
