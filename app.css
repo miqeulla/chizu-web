@@ -3976,7 +3976,7 @@ button.collection-row { justify-content: stretch; justify-items: start; width: 1
 }
 .reward-tile img { width: 100%; height: 100%; object-fit: contain; }
 .reward-tile--resource img { width: 58px; }
-.reward-tile span, .reward-tile small { color: #e1cff5; font-size: 11px; }
+.reward-tile :where(span, small) { color: #e1cff5; font-size: 11px; }
 .reward-tile small:empty { display: none; }
 #frame-inventory-items .reward-tile {
   grid-template-rows: 112px auto auto 1fr;
@@ -5121,17 +5121,17 @@ body:has(#home-page:not([hidden])) .drop-actions .btn-primary, #drop-to-results 
 .frame-pack-heading h3 { font: 700 24px/1.1 "Chizu Display", Georgia, serif; overflow-wrap: anywhere; }
 .frame-pack-heading .hint { font-size: 11px; white-space: nowrap; }
 .frame-pack-items { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 9px; min-width: 0; }
+:is(.frame-pack-item, .frame-rarity-badge) { --frame-accent: #b2d5ff; }
+:is(.frame-pack-item, .frame-rarity-badge)[data-rarity="epic"] { --frame-accent: #dfb1ff; }
+:is(.frame-pack-item, .frame-rarity-badge)[data-rarity="legendary"] { --frame-accent: #ffe19d; }
+:is(.frame-pack-item, .frame-rarity-badge)[data-rarity="mythical"] { --frame-accent: #ff9ead; }
 .frame-pack-item {
-  --frame-accent: #b2d5ff;
   display: grid;
   grid-template-rows: auto auto 1fr auto;
   gap: 5px;
   min-width: 0;
   text-align: center;
 }
-.frame-pack-item[data-rarity="epic"] { --frame-accent: #dfb1ff; }
-.frame-pack-item[data-rarity="legendary"] { --frame-accent: #ffe19d; }
-.frame-pack-item[data-rarity="mythical"] { --frame-accent: #ff9ead; }
 .frame-pack-image {
   display: block;
   width: 100%;
@@ -5142,7 +5142,7 @@ body:has(#home-page:not([hidden])) .drop-actions .btn-primary, #drop-to-results 
   box-shadow: 0 0 10px color-mix(in srgb, var(--frame-accent) 24%, transparent);
 }
 .frame-pack-tags { display: flex; justify-content: center; align-items: center; gap: 5px; font-size: 11px; }
-.frame-pack-rarity { padding: 1px 5px; border: 1px solid currentColor; border-radius: 5px; color: var(--frame-accent); font-weight: 800; }
+.frame-rarity-badge { display: inline-block; padding: 1px 5px; border: 1px solid currentColor; border-radius: 5px; color: var(--frame-accent); font-size: 11px; font-weight: 800; }
 .frame-pack-chance { color: #f1ddff; font-variant-numeric: tabular-nums; font-weight: 700; }
 .frame-pack-name { font-size: 12px; line-height: 1.25; overflow-wrap: anywhere; }
 .frame-pack-item > .hint { font-size: 10px; line-height: 1.25; }

@@ -3963,7 +3963,7 @@
       throw error;
     }
     el("case-rewards").replaceChildren(...state.caseCatalog.rewards.map((reward) => {
-      const subtitle = reward.rarity_title || `Количество · ${reward.quantity}`;
+      const subtitle = reward.frame_id ? frameRarityBadge(reward) : `Количество · ${reward.quantity}`;
       const tile = rewardTile(reward.title, casePrizeImage(reward.id, reward.preview_url),
         subtitle, "", () => openCaseReward(reward), !reward.frame_id);
       if (reward.frame_id) tile.lastElementChild.dataset.caseFrame = reward.frame_id;
@@ -3984,8 +3984,11 @@
     image.decoding = "async";
     const name = document.createElement("strong");
     name.textContent = title;
-    const meta = document.createElement("span");
-    meta.textContent = subtitle;
+    let meta = subtitle;
+    if (typeof subtitle === "string") {
+      meta = document.createElement("span");
+      meta.textContent = subtitle;
+    }
     const details = document.createElement("small");
     details.textContent = note;
     button.append(image, name, meta, details);
@@ -4017,7 +4020,8 @@
     body.append(rewardVisual(preview, reward.frame_id ? reward : null), description);
     if (reward.frame_id) {
       const missing = state.caseCatalog.progress.missing_frames.some(({ id }) => id === reward.frame_id);
-      description.textContent = `Рамка · ${reward.rarity_title} · ${missing ? "В коллекции пока нет" : "Уже в коллекции"}`;
+      description.append("Рамка · ", frameRarityBadge(reward),
+        missing ? " · В коллекции пока нет" : " · Уже в коллекции");
       const tryOn = displayButton("Примерить на карте", () => {
         const frames = state.caseCatalog.rewards.filter((item) => item.frame_id)
           .map((item) => ({ ...item, id: item.frame_id }));
@@ -4129,6 +4133,16 @@
     }
   }
 
+  function frameRarityBadge(frame) {
+    const rarityCode = RARITIES.find(({ key }) => key === frame.rarity)?.title.split(" · ")[0];
+    const badge = document.createElement("span");
+    badge.className = "frame-rarity-badge";
+    badge.dataset.rarity = frame.rarity;
+    badge.textContent = rarityCode || frame.rarity_title;
+    badge.setAttribute("aria-label", frame.rarity_title);
+    return badge;
+  }
+
   function framePackItem(frame) {
     const item = document.createElement("article");
     item.className = "frame-pack-item";
@@ -4141,12 +4155,7 @@
     image.decoding = "async";
     const tags = document.createElement("div");
     tags.className = "frame-pack-tags";
-    const rarityCode = RARITIES.find(({ key }) => key === frame.rarity)?.title.split(" · ")[0];
-    const rarity = document.createElement("span");
-    rarity.className = "frame-pack-rarity";
-    rarity.textContent = rarityCode || frame.rarity_title;
-    rarity.setAttribute("aria-label", frame.rarity_title);
-    tags.append(rarity);
+    tags.append(frameRarityBadge(frame));
     if (frame.chance !== undefined) {
       const chance = document.createElement("span");
       chance.className = "frame-pack-chance";
