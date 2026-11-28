@@ -434,7 +434,7 @@
       </div>
       <article class="daily-banner">
         <span class="daily-icon game-icon game-icon-gift" aria-hidden="true"></span>
-        <p id="daily-status">Ежедневная награда: 5 пыли</p>
+        <p id="daily-status" role="status">Ежедневная награда</p>
         <button id="daily-button" class="btn btn-secondary" type="button">
           Забрать <svg class="button-sparkle" aria-hidden="true"><use href="#icon-star"></use></svg>
         </button>
@@ -513,6 +513,7 @@
         </div>
         <p id="collection-album-status" class="hint" role="status"></p>
         <button id="album-favorites-filter" class="btn btn-secondary" type="button" aria-pressed="false">Избранные альбомы</button>
+        <button id="album-almost-sort" class="btn btn-secondary" type="button" aria-pressed="false">Почти собраны</button>
         <div id="album-reward" class="album-reward" hidden></div>
         <div id="collection-album-items" class="collection-list"></div>
         <div id="collection-album-pages" class="collection-pages" hidden>
@@ -566,6 +567,7 @@
       <div class="tabs" role="group" aria-label="Разделы маркета">
         <button type="button" data-market-tab="all" class="active" aria-controls="market-pane" aria-pressed="true">Все лоты</button>
         <button type="button" data-market-tab="mine" aria-controls="mine-pane" aria-pressed="false">Мои лоты</button>
+        <button type="button" data-market-tab="bids" aria-controls="bids-pane" aria-pressed="false">Мои ставки</button>
         <button type="button" data-market-tab="trade" aria-controls="trade-pane" aria-pressed="false">Обмен</button>
       </div>
       <div id="market-pane">
@@ -575,14 +577,33 @@
           <button data-market-filter="affordable" type="button" class="btn btn-secondary" aria-pressed="false">Мне по карману</button>
           <button data-market-filter="ending_soon" type="button" class="btn btn-secondary" aria-pressed="false" title="Заканчиваются в ближайший час">Скоро закончатся</button>
           <button data-market-filter="special_numbers" type="button" class="btn btn-secondary" aria-pressed="false">Особые номера</button>
+          <button data-market-filter="wanted" type="button" class="btn btn-secondary" aria-pressed="false">Ищу</button>
         </div>
         <div id="market-cards" aria-live="polite"></div>
-        <button id="market-more" class="btn btn-secondary btn-block" type="button" hidden>Ещё лоты</button>
+        <div class="list-pager" id="market-pages" hidden>
+          <button id="market-prev" class="btn btn-secondary" type="button">Назад</button>
+          <span id="market-page-number" class="hint" role="status"></span>
+          <button id="market-next" class="btn btn-secondary" type="button">Далее</button>
+        </div>
       </div>
       <div id="mine-pane" hidden>
         <h2 class="section-label market-section-title">Мои лоты</h2>
         <button id="create-lot" class="btn btn-primary btn-block" type="button">Выбрать карту для аукциона</button>
         <div id="my-market-listings"></div>
+        <div class="list-pager" id="my-listings-pages" hidden>
+          <button id="my-listings-prev" class="btn btn-secondary" type="button">Назад</button>
+          <span id="my-listings-page-number" class="hint" role="status"></span>
+          <button id="my-listings-next" class="btn btn-secondary" type="button">Далее</button>
+        </div>
+      </div>
+      <div id="bids-pane" hidden>
+        <h2 class="section-label market-section-title">Мои ставки</h2>
+        <div id="my-bid-listings"></div>
+        <div class="list-pager" id="my-bids-pages" hidden>
+          <button id="my-bids-prev" class="btn btn-secondary" type="button">Назад</button>
+          <span id="my-bids-page-number" class="hint" role="status"></span>
+          <button id="my-bids-next" class="btn btn-secondary" type="button">Далее</button>
+        </div>
       </div>
       <section id="trade-pane" hidden aria-label="Обмен картами">
         <button id="transfer-links-open" class="btn btn-secondary" type="button" aria-haspopup="dialog">Ссылки передачи <span aria-hidden="true">›</span></button>
@@ -590,6 +611,17 @@
           <div class="trade-head">
             <strong id="trade-title">Новое предложение</strong>
             <span id="trade-state" role="status">Выберите карты для обмена</span>
+          </div>
+          <button id="trade-resume-draft" class="btn btn-secondary btn-block" type="button" hidden>Продолжить обмен</button>
+          <p id="trade-draft-status" class="hint" role="status" hidden></p>
+          <div id="trade-primary-wrap" class="action-with-info">
+            <button id="primary" class="btn btn-primary btn-block" type="button" disabled>Создать ссылку обмена</button>
+            <button id="trade-info" class="info-trigger" type="button"
+              aria-label="Информация об обмене"
+              data-info-title="Обмен картами"
+              data-info-text="До 10 карт с каждой стороны. Карты зарезервированы до подтверждения автора, отмены или истечения 24 часов с создания ссылки.">
+              <svg class="icon-sm" aria-hidden="true"><use href="#icon-info"></use></svg>
+            </button>
           </div>
           <div class="trade-layout">
             <section class="side">
@@ -603,27 +635,19 @@
           </div>
           <div id="inventory-section" class="inventory">
             <div class="search-row">
-              <input id="search" type="search" placeholder="Поиск по имени">
+              <input id="search" type="search" maxlength="100" placeholder="Имя или аниме" aria-label="Поиск карт для обмена">
               <button id="prev" class="icon-btn" type="button" aria-label="Назад">‹</button>
               <span id="page-label">1 / 1</span>
               <button id="next" class="icon-btn" type="button" aria-label="Вперёд">›</button>
             </div>
             <h2 id="inventory-title" class="section-label">Ваш инвентарь</h2>
+            <p id="trade-inventory-status" class="hint" role="status"></p>
             <div class="card-grid" id="inventory-cards"></div>
           </div>
           <div id="hint" class="hint trade-status" hidden></div>
           <button id="cancel" class="btn btn-secondary btn-block" type="button" hidden>Отменить предложение</button>
           <button id="refresh-trade" class="btn btn-secondary btn-block" type="button" hidden>Обновить статус</button>
           <button id="new-trade" class="btn btn-secondary btn-block" type="button" hidden>Новый обмен</button>
-          <div id="trade-primary-wrap" class="action-with-info">
-            <button id="primary" class="btn btn-primary btn-block" type="button" disabled>Создать ссылку обмена</button>
-            <button id="trade-info" class="info-trigger" type="button"
-              aria-label="Информация об обмене"
-              data-info-title="Обмен картами"
-              data-info-text="До 10 карт с каждой стороны. Карты зарезервированы до подтверждения автора, отмены или истечения 24 часов с создания ссылки.">
-              <svg class="icon-sm" aria-hidden="true"><use href="#icon-info"></use></svg>
-            </button>
-          </div>
           <div id="share" class="share">
             <p>Отправьте ссылку игроку. Когда он предложит свои карты, бот пришлёт вам уведомление для проверки и подтверждения.</p>
             <div class="share-row">
@@ -721,7 +745,11 @@
             </form>
             <p id="craft-search-status" class="hint" role="status"></p>
             <div id="craft-results" class="craft-results"></div>
-            <button id="craft-next" class="btn btn-secondary btn-block" type="button" hidden>Показать ещё</button>
+            <div class="list-pager" id="craft-pages" hidden>
+              <button id="craft-prev" class="btn btn-secondary" type="button">Назад</button>
+              <span id="craft-page-number" class="hint" role="status"></span>
+              <button id="craft-next" class="btn btn-secondary" type="button">Далее</button>
+            </div>
           </div>
         </template>
       </div>
@@ -763,6 +791,7 @@
           </div>
         </article>
         <div id="case-loading-status" role="status"></div>
+        <button id="case-last-reward" class="btn btn-secondary btn-block" type="button" hidden>Последняя награда</button>
         <section class="economy-panel" aria-labelledby="case-contents-title">
           <h2 id="case-contents-title">Содержимое кейса</h2>
           <p id="case-guarantee" class="hint" role="status"></p>
@@ -907,8 +936,11 @@
           <span id="player-collection-count" class="hint"></span>
         </div>
         <div id="player-cards" class="card-grid"></div>
-        <button id="player-more" class="btn btn-secondary btn-block"
-          type="button" hidden>Показать ещё</button>
+        <div class="list-pager" id="player-collection-pages" hidden>
+          <button id="player-collection-prev" class="btn btn-secondary" type="button">Назад</button>
+          <span id="player-collection-page-number" class="hint" role="status"></span>
+          <button id="player-collection-next" class="btn btn-secondary" type="button">Далее</button>
+        </div>
       </section>
       <p id="player-collection-hidden" class="empty-state" hidden>
         Игрок скрыл статистику и коллекцию.
@@ -1065,6 +1097,8 @@
       </div>
       <div id="frame-roulette-award" class="frame-roulette-award"></div>
       <p id="frame-roulette-result" role="status" aria-live="polite"></p>
+      <button id="frame-roulette-skip" class="btn btn-secondary btn-block" type="button" hidden>Показать результат</button>
+      <button id="frame-roulette-try" class="btn btn-secondary btn-block" type="button" hidden>Примерить</button>
       <button id="frame-roulette-close" class="btn btn-primary btn-block" type="button" hidden>Продолжить</button>
     </div>
   </div>
@@ -1141,6 +1175,14 @@
       <p id="info-popup-text"></p>
     </div>
   </div>
+  <section id="subscription-gate" role="dialog" aria-modal="true" aria-labelledby="subscription-title" hidden>
+    <div class="subscription-panel">
+      <h2 id="subscription-title">Подписка на канал Chizu</h2>
+      <p id="subscription-status" role="status">Подпишитесь на канал, чтобы продолжить игру.</p>
+      <a id="subscription-channel" class="btn btn-primary btn-block" href="https://t.me/chizucard" target="_blank" rel="noopener">Подписаться</a>
+      <button id="subscription-check" class="btn btn-secondary btn-block" type="button">Проверить подписку</button>
+    </div>
+  </section>
   <script>
     (() => {
       const cover = document.getElementById("drop-card-cover");

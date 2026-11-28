@@ -55,7 +55,7 @@
     collectionPage: 1, collectionPages: 1, collectionQuery: "",
     collectionRarity: "", collectionSort: "new", collectionFilter: "", profile: null,
     collectionMode: "cards", collectionVersion: 0, receivedCards: [],
-    marketItems: [], activePage: "home",
+    marketPage: 1, marketHasNext: false, myListingsPage: 1, myListingsHasNext: false, activePage: "home",
     collectionTotal: 0, ownedCardCount: 0,
     favorites: [], favoriteLimit: 20, shopFrames: [], framePacks: [], packOpening: false,
     frameShopCards: [], frameShopPage: 1, frameShopPages: 1,
@@ -69,8 +69,8 @@
     marketTab: "all", shopTab: "frames", lastDropCard: null,
     dropStartedAt: 0, dropStageTimer: 0, dropTimer: 0, dropReadyAt: 0, dropBusy: false,
     mainClick: null, overlayOpen: false,
-    publicPlayer: null, publicInventoryPage: 0,
-    publicInventoryLoading: false, publicInventoryIds: new Set(),
+    publicPlayer: null, publicInventoryPage: 1, publicInventoryPages: 1,
+    publicInventoryLoading: false,
     availableBackgrounds: [],
     backgroundCatalogRequest: null, backgroundSaving: false, backgroundSaveVersion: 0,
   };
@@ -87,7 +87,7 @@
     document.documentElement.toggleAttribute("data-keyboard-open", next > 0);
   }
   viewport?.addEventListener("resize", updateKeyboardInset);
-  const albums = { series: null, page: 1, listPage: 1, version: 0, favorites: false };
+  const albums = { series: null, page: 1, listPage: 1, version: 0, favorites: false, almostComplete: false };
   const copies = { page: 1, version: 0, selected: new Map(), maxBatch: 0, busy: false };
   const pagePositions = new Map();
   const loadedCollectionModes = new Set();
@@ -110,7 +110,8 @@
     const settings = {
       mode: state.collectionMode, query: state.collectionQuery, filter: state.collectionFilter,
       rarity: state.collectionRarity, sort: state.collectionSort, series: albums.series,
-      albumPage: albums.page, albumListPage: albums.listPage, copiesPage: copies.page,
+      albumPage: albums.page, albumListPage: albums.listPage, albumAlmostComplete: albums.almostComplete,
+      copiesPage: copies.page,
     };
     playerPreference("collection-settings", JSON.stringify(settings));
   }
@@ -131,6 +132,7 @@
     if (typeof saved.series === "string") albums.series = saved.series;
     if (Number.isSafeInteger(saved.albumPage) && saved.albumPage > 0) albums.page = saved.albumPage;
     if (Number.isSafeInteger(saved.albumListPage) && saved.albumListPage > 0) albums.listPage = saved.albumListPage;
+    albums.almostComplete = saved.albumAlmostComplete === true;
     if (Number.isSafeInteger(saved.copiesPage) && saved.copiesPage > 0) copies.page = saved.copiesPage;
   }
   const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -171,11 +173,12 @@
   const formatCrystalCount = (count) => `${count} ${quantityForm(count, "кристалл", "кристалла", "кристаллов")}`;
   const selectedCards = () => [...state.selected.values()];
   const hasCustomFrame = (card) => Boolean(card.frame_style && card.frame_style !== "classic");
+  const equippedFrameLabel = (card) => `${card.style_title}${card.frame_bound ? " · Закреплена" : ""}`;
   const frameHandoffWarning = (cards) => {
     const framed = cards.filter(hasCustomFrame);
     return framed.length
-      ? `Особых рамок на картах: ${framed.length}. Они перейдут новым владельцам вместе с картами.`
-      : "Любая надетая особая рамка переходит новому владельцу вместе с картой.";
+      ? `Рамки перейдут вместе с картами: ${framed.map(equippedFrameLabel).join(", ")}.`
+      : "";
   };
   const rarityClass = (rarity) => `rarity-${rarity}`;
   const formatPrintNumber = (card) => `№${String(card.print_no).padStart(3, "0")}`;
@@ -209,12 +212,46 @@
 
   const recoverablePurchase = /^\/api\/(?:drop(?:\/all|\/extra)?|rolls\/(?:buy|dust)|cases\/open|frames\/(?:buy|recycle|packs\/(?:buy|open))|cards\/\d+\/(?:upgrade|downgrade)|collection\/albums\/claim|craft)$/;
   const newRequestId = () => crypto.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const walletRead = Symbol("walletRead");
+  let walletGeneration = 0;
+  let walletReadSequence = 0;
+  let dailyChangedAt = 0;
+  const walletChips = {
+    balance: { generation: 0, sequence: 0, initialized: false },
+    "crystals-balance": { generation: 0, sequence: 0, initialized: false },
+    "roll-balance": { generation: 0, sequence: 0, initialized: false },
+  };
   let pendingOperation = null;
   let economyRequestBusy = false;
+  let gameplayStarted = false;
+  let subscriptionInert = [];
+  let subscriptionReturnFocus = null;
+
+  function showSubscriptionGate(status, channelUrl) {
+    const gate = el("subscription-gate");
+    if (channelUrl) el("subscription-channel").href = channelUrl;
+    el("subscription-status").textContent = status;
+    if (!gate.hidden) return;
+    subscriptionReturnFocus = document.activeElement;
+    subscriptionInert = [...document.body.children].filter((element) =>
+      element !== gate && !element.inert && !element.matches("script, style"));
+    subscriptionInert.forEach((element) => { element.inert = true; });
+    gate.hidden = false;
+    window.ChizuLoader?.finish();
+    el("subscription-channel").focus({ preventScroll: true });
+  }
+
+  function closeSubscriptionGate() {
+    el("subscription-gate").hidden = true;
+    subscriptionInert.forEach((element) => { element.inert = false; });
+    subscriptionInert = [];
+    if (subscriptionReturnFocus?.isConnected) subscriptionReturnFocus.focus({ preventScroll: true });
+  }
 
   async function requestApi(path, options = {}, quick = false) {
     const initData = getInitData();
     const method = (options.method || "GET").toUpperCase();
+    const read = method === "GET" ? { generation: walletGeneration, sequence: ++walletReadSequence } : null;
     const { idempotencyKey, ...networkOptions } = options;
     const requestOptions = {
       ...networkOptions,
@@ -235,16 +272,22 @@
           ...requestOptions,
           signal: controller.signal,
         });
-        if (method !== "GET" || ![502, 503, 504].includes(response.status) || attempt === attempts - 1) {
-          const data = response.headers.get("content-type")?.includes("application/json")
-            ? await response.json() : null;
+        const data = response.headers.get("content-type")?.includes("application/json")
+          ? await response.json() : null;
+        const needsSubscription = data?.channel_url &&
+          ["subscription_required", "subscription_unavailable"].includes(data.code);
+        if (needsSubscription || method !== "GET" || ![502, 503, 504].includes(response.status) || attempt === attempts - 1) {
           if (!response.ok) {
+            if (needsSubscription && path !== "/api/subscription/check") {
+              showSubscriptionGate(data.error, data.channel_url);
+            }
             throw Object.assign(new Error(data?.error || `Ошибка сервера (${response.status})`),
               { status: response.status, code: data?.code, retryable: response.status >= 500 });
           }
+          if (read && data && typeof data === "object") data[walletRead] = read;
           return data;
         }
-        await response.body?.cancel();
+        if (!response.bodyUsed) await response.body?.cancel();
       } catch (error) {
         if (error.status) throw error;
         if (attempt === attempts - 1) {
@@ -337,7 +380,9 @@
         clearTimeout(state.dropStageTimer);
         showDropResults(cards);
       } else if (operation.path === "/api/cases/open") {
-        openInfoPopup("Кейс открыт", caseRewardSummary(result));
+        await loadCaseCatalog().catch(showError);
+        showRoulette("Награда из кейса", "", caseBackdrop(), true);
+        showCaseAward(result, false);
       } else if (operation.path === "/api/frames/packs/open") {
         openInfoPopup("Пак открыт", `Получена рамка «${result.frame.title}».`);
       } else if (operation.path === "/api/craft" && cards.length) {
@@ -536,17 +581,37 @@
     syncBackButton();
   }
 
-  function setBalance(balance) {
+  function setBalance(balance, snapshot) {
+    if (!updateBalanceChip("balance", balance, state.balance, "Пыль", snapshot)) return;
     state.balance = balance;
-    updateBalanceChip("balance", balance, "Пыль");
     renderEconomyStatus();
   }
-  function updateBalanceChip(id, balance, label) {
+  function updateBalanceChip(id, balance, previousBalance, label, snapshot) {
+    if (!Number.isSafeInteger(balance)) return false;
+    const chipState = walletChips[id];
+    const read = snapshot?.[walletRead];
+    if (read) {
+      if (read.generation < chipState.generation || read.sequence < chipState.sequence) return false;
+      chipState.sequence = read.sequence;
+    } else chipState.generation = ++walletGeneration;
     const value = el(id);
-    const formatted = balance?.toLocaleString("ru-RU") ?? "—";
+    const formatted = balance.toLocaleString("ru-RU");
+    const chip = value.parentElement;
     value.textContent = formatted;
-    value.parentElement.setAttribute("aria-label", `${label}: ${formatted}`);
-    value.parentElement.title = `${label}: ${formatted}`;
+    chip.setAttribute("aria-label", `${label}: ${formatted}`);
+    chip.title = `${label}: ${formatted}`;
+    if (chipState.initialized && balance !== previousBalance) {
+      chip.querySelector(".balance-delta")?.remove();
+      const delta = document.createElement("span");
+      delta.className = "balance-delta";
+      delta.dataset.direction = balance > previousBalance ? "credit" : "debit";
+      delta.setAttribute("aria-hidden", "true");
+      delta.textContent = `${balance > previousBalance ? "+" : "−"}${Math.abs(balance - previousBalance).toLocaleString("ru-RU")}`;
+      chip.append(delta);
+      setTimeout(() => delta.remove(), 1800);
+    }
+    chipState.initialized = true;
+    return true;
   }
   function setProfileAvatar(id, profile) {
     const avatar = el(id);
@@ -565,16 +630,16 @@
     }
     avatar.setAttribute("aria-label", `Аватар: ${profile.display_name}`);
   }
-  function setCrystals(balance) {
+  function setCrystals(balance, snapshot) {
+    if (!updateBalanceChip("crystals-balance", balance, state.crystals, "Кристаллы", snapshot)) return;
     state.crystals = balance;
-    updateBalanceChip("crystals-balance", balance, "Кристаллы");
     el("crystal-shop-balance").textContent = formatCrystalCount(balance);
     updateRollShopButtons();
     updateCaseButton();
   }
-  function setRolls(balance) {
+  function setRolls(balance, snapshot) {
+    if (!updateBalanceChip("roll-balance", balance, state.rolls, "Билеты", snapshot)) return;
     state.rolls = balance;
-    updateBalanceChip("roll-balance", balance, "Билеты");
     el("extra-roll-count").textContent = balance;
     el("home-ticket-panel").hidden = balance < 1;
     el("home-ticket-count").textContent = `${balance} ${ticketWord(balance)}`;
@@ -606,6 +671,7 @@
   function openWallet(currency, { missing = 0, onBack } = {}) {
     const body = document.createElement("div");
     body.className = "wallet-actions";
+    let updateSummary;
     const titles = { dust: "Пыль", crystals: "Кристаллы", rolls: "Билеты" };
     const balance = document.createElement("strong");
     balance.textContent = `На балансе: ${currency === "dust" ? state.balance : state[currency]}`;
@@ -623,10 +689,22 @@
       window.scrollTo(0, 0);
     };
     if (currency === "dust") {
+      const reserves = document.createElement("p");
+      reserves.className = "hint";
+      reserves.hidden = true;
+      body.append(reserves);
+      updateSummary = (data) => {
+        if (!Number.isInteger(data.reserved)) return;
+        setBalance(data.available, data);
+        balance.textContent = `Доступно для трат: ${state.balance.toLocaleString("ru-RU")} пыли`;
+        reserves.textContent = `В резерве ставок: ${data.reserved.toLocaleString("ru-RU")} пыли`;
+        reserves.hidden = false;
+      };
       body.append(displayButton("Билеты за пыль", () => shop("rolls")),
         displayButton("Создать карту", () => shop("craft")),
         displayButton("Улучшить карту", () => { closeSheet(); showPage("collection"); }),
         displayButton("Паки рамок", () => shop("frames")),
+        displayButton("Мои ставки", () => { closeSheet(); showPage("trade"); setMarketTab("bids"); }),
         displayButton("Маркет", () => { closeSheet(); showPage("trade"); setMarketTab("all"); }));
     } else if (currency === "crystals") {
       const note = document.createElement("p");
@@ -650,10 +728,10 @@
     history.className = "wallet-history";
     body.append(history);
     openSheet(titles[currency], body, null, onBack);
-    loadWalletHistory(currency, history);
+    loadWalletHistory(currency, history, null, updateSummary);
   }
 
-  async function loadWalletHistory(currency, container, before = null) {
+  async function loadWalletHistory(currency, container, before = null, updateSummary) {
     const units = { dust: "пыли", crystals: "кристаллов", rolls: "бил." };
     const reasons = {
       crystals_purchased: "Покупка за Telegram Stars",
@@ -681,6 +759,7 @@
       const suffix = before ? `?before=${before}` : "";
       const data = await api(`/api/wallet/${currency}${suffix}`);
       if (!container.isConnected) return;
+      updateSummary?.(data);
       status.remove();
       if (!data.items.length && !before) {
         status.textContent = "История пока пуста.";
@@ -727,7 +806,7 @@
     } catch (error) {
       status.replaceChildren(displayButton("Повторить загрузку истории", () => {
         status.remove();
-        return loadWalletHistory(currency, container, before);
+        return loadWalletHistory(currency, container, before, updateSummary);
       }));
       showError(error);
     }
@@ -894,8 +973,8 @@
     state.imageUrls.set(cacheKey, url);
   }
 
-  function loadCardImageUrl(card, tradeToken = "", frameStyle = card.frame_style, liveFrame = true) {
-    const cacheKey = `${card.id}:${frameStyle || "legacy"}:${card.upgrade_level || 0}:${tradeToken || ""}:${Number(liveFrame)}`;
+  function loadCardImageUrl(card, tradeToken = "", frameStyle = card.frame_style, liveFrame = true, previewLevel = null) {
+    const cacheKey = `${card.id}:${frameStyle || "legacy"}:${card.upgrade_level || 0}:${tradeToken || ""}:${Number(liveFrame)}:${previewLevel ?? ""}`;
     const cachedUrl = state.imageUrls.get(cacheKey);
     if (cachedUrl) return Promise.resolve(cachedUrl);
     let imagePromise = state.imagePromises.get(cacheKey);
@@ -903,6 +982,7 @@
     const imageQuery = new URLSearchParams({ alpha: "1" });
     if (liveFrame) imageQuery.set("live_frame", "1");
     imageQuery.set("upgrade", card.upgrade_level || 0);
+    if (previewLevel !== null) imageQuery.set("upgrade_preview", previewLevel);
     if (appVersion) imageQuery.set("v", appVersion);
     if (tradeToken) imageQuery.set("trade", tradeToken);
     if (frameStyle) imageQuery.set("frame", frameStyle);
@@ -1205,19 +1285,16 @@
       const invoice = await api("/api/payments/stars", {
         method: "POST", body: JSON.stringify({ pack_id: packId }),
       });
+      playerPreference("last-star-order", JSON.stringify({ id: invoice.order, paid: false }));
       const result = await new Promise(resolve => tg.openInvoice(invoice.invoice_url, resolve));
       if (result === "cancelled" || result === "failed") {
+        playerPreference("last-star-order", "");
         status.textContent = result === "cancelled" ? "Оплата отменена." : "Оплата не прошла. Можно попробовать снова.";
         return;
       }
       status.textContent = "Проверяем оплату…";
       for (let attempt = 0; attempt < 15; attempt++) {
-        const payment = await api(`/api/payments/stars/${encodeURIComponent(invoice.order)}`);
-        if (payment.paid) {
-          await loadProfile();
-          status.textContent = "Кристаллы зачислены.";
-          return;
-        }
+        if (await checkStarOrder(invoice.order)) return;
         await pause(1000);
       }
       status.textContent = "Платёж ещё обрабатывается. Бот сообщит о зачислении. Помощь — /paysupport.";
@@ -1229,13 +1306,55 @@
     }
   }
 
+  async function checkStarOrder(id) {
+    const payment = await requestApi(`/api/payments/stars/${encodeURIComponent(id)}`, {}, true);
+    if (!payment.paid) return false;
+    await loadProfile();
+    playerPreference("last-star-order", JSON.stringify({ id, paid: true }));
+    el("crystal-payment-status").textContent = "Кристаллы зачислены.";
+    return true;
+  }
+
+  async function resumeStarPayment() {
+    if (starPaymentBusy) return;
+    let order;
+    try { order = JSON.parse(playerPreference("last-star-order") || "null"); }
+    catch (_error) { return; }
+    if (typeof order?.id !== "string") return;
+    const status = el("crystal-payment-status");
+    if (order.paid) {
+      status.textContent = "Кристаллы зачислены.";
+      return;
+    }
+    starPaymentBusy = true;
+    renderStarPacks();
+    status.textContent = "Проверяем оплату…";
+    try {
+      if (!await checkStarOrder(order.id)) {
+        status.textContent = "Платёж ещё обрабатывается. Бот сообщит о зачислении.";
+      }
+    } catch (_error) {
+      status.textContent = "Не удалось проверить оплату. Помощь — /paysupport.";
+    } finally {
+      starPaymentBusy = false;
+      renderStarPacks();
+    }
+  }
+
   async function fetchOwnProfile() {
     const backgroundSaveVersion = state.backgroundSaveVersion;
     const profile = await api("/api/me");
+    if (profile[walletRead]?.generation < dailyChangedAt && state.profile) {
+      profile.daily_reward_available = state.profile.daily_reward_available;
+      profile.next_daily_reset = state.profile.next_daily_reset;
+    }
     if (backgroundSaveVersion !== state.backgroundSaveVersion) {
       profile.profile_background = state.profile.profile_background;
     }
     state.profile = profile;
+    setBalance(profile.balance, profile);
+    setCrystals(profile.crystals, profile);
+    setRolls(profile.rolls, profile);
     renderUpdateChannel(profile);
     renderStarPacks();
     renderCraftRarities();
@@ -1252,21 +1371,12 @@
     state.favoriteLimit = profile.favorite_limit;
     state.rollCrystalCost = profile.roll_crystal_cost;
     state.maxRollPurchaseBatch = profile.max_roll_purchase_batch ?? 100;
-    setBalance(profile.balance);
-    setCrystals(profile.crystals);
-    setRolls(profile.rolls);
     renderEconomyStatus();
     updateProfileTier(profile);
     state.ownedCardCount = profile.card_count;
     el("card-count").textContent = state.ownedCardCount;
     el("welcome").textContent = profile.display_name;
-    el("daily-button").disabled = !profile.daily_reward_available;
-    el("daily-button").textContent = profile.daily_reward_available ? "Забрать" : "Получено";
-    el("daily-status").textContent = profile.daily_reward_available
-      ? `Ежедневная награда: ${profile.vip_daily_reward} пыли${
-        profile.updates_channel_url ? " · для подписчиков" : ""}${
-        profile.vip.active ? " · VIP-бонус" : ""}`
-      : `Следующая награда: ${localDateTime(profile.next_daily_reset)}`;
+    renderDailyReward(state.profile);
     const showingEmptyCollection = !el("collection-empty").hidden;
     if (state.collectionVisited && state.collectionMode === "cards" &&
         showingEmptyCollection !== (profile.card_count === 0)) {
@@ -1433,6 +1543,12 @@
     }
   }
 
+  function dropArrivalLabel(card) {
+    if (!card.new_for_collection) return "";
+    return ["Впервые в коллекции", card.album_total ? `Альбом ${card.album_owned} из ${card.album_total}` : ""]
+      .filter(Boolean).join(" · ");
+  }
+
   function showDropResults(cards) {
     const single = cards.length === 1;
     state.lastDropCard = single ? cards[0] : null;
@@ -1464,6 +1580,13 @@
         const label = document.createElement("span");
         label.textContent = `${card.name} · ${card.rarity_title}`;
         item.append(button, label);
+        const arrival = dropArrivalLabel(card);
+        if (arrival) {
+          const badge = document.createElement("small");
+          badge.className = "drop-arrival";
+          badge.textContent = arrival;
+          item.append(badge);
+        }
         return item;
       }));
       results.hidden = false;
@@ -1471,7 +1594,7 @@
     el("drop-title").textContent = dropSession?.crafted ? "Карта создана!"
       : single ? "Карта получена!" : `Получено карт: ${cards.length}`;
     el("drop-rarity").textContent = single ? cards[0].rarity_title : "";
-    el("drop-description").textContent = "";
+    el("drop-description").textContent = single ? dropArrivalLabel(cards[0]) : "";
     el("drop-skip").hidden = true;
     el("drop-close").hidden = false;
     el("drop-followup").hidden = false;
@@ -1718,7 +1841,7 @@
       state.collectionPage = data.page;
       state.collectionPages = data.pages;
       state.collectionTotal = data.total;
-      setBalance(data.balance);
+      setBalance(data.balance, data);
       el("collection-more").hidden = data.page >= data.pages;
       state.collectionItems = reset ? data.items : [...state.collectionItems, ...data.items];
       loadedCollectionModes.add("cards");
@@ -1910,6 +2033,9 @@
     const filter = el("album-favorites-filter");
     filter.hidden = series !== null;
     filter.setAttribute("aria-pressed", String(albums.favorites));
+    const sort = el("album-almost-sort");
+    sort.hidden = series !== null;
+    sort.setAttribute("aria-pressed", String(albums.almostComplete));
     const reward = el("album-reward");
     reward.hidden = true;
     reward.replaceChildren();
@@ -1918,7 +2044,10 @@
     list.replaceChildren();
     const params = new URLSearchParams({ page: String(page) });
     if (series !== null) params.set("series", series);
-      else if (albums.favorites) params.set("favorites", "1");
+    else {
+      if (albums.favorites) params.set("favorites", "1");
+      if (albums.almostComplete) params.set("sort", "almost_complete");
+    }
     try {
       const data = await api(`/api/collection/albums?${params}`);
       if (version !== albums.version) return;
@@ -1928,7 +2057,8 @@
         status.textContent = data.total ? "" : albums.favorites ? "Пока нет избранных альбомов."
           : "Альбом появится после получения первой карты из серии.";
         for (const item of data.items) {
-          const row = collectionRow(item.series, `Собрано ${item.owned} из ${item.total}`, () => {
+          const caption = `Собрано ${item.owned} из ${item.total}`;
+          const row = collectionRow(item.series, item.missing_name ? `${caption} · Осталась ${item.missing_name}` : caption, () => {
             albums.listPage = albums.page;
             albums.listScroll = window.scrollY;
             albums.series = item.series;
@@ -1962,6 +2092,11 @@
           const entry = document.createElement("div");
           entry.className = "album-list-entry";
           entry.append(row, favorite);
+          if (item.missing_name) {
+            const find = displayButton("Найти", () => findOnMarket(item.missing_name));
+            find.classList.add("album-market-link");
+            entry.append(find);
+          }
           list.append(entry);
         }
       } else {
@@ -1993,7 +2128,7 @@
         for (const item of data.items) {
           const { name, card, craft_price: price } = item;
           const details = card ? `В коллекции · ${card.rarity_title}`
-            : price ? `Ещё не получена · создание за ${price} пыли` : "Ещё не получена";
+            : item.wanted ? "В списке «Ищу»" : price ? `Ещё не получена · создание за ${price} пыли` : "Ещё не получена";
           const row = collectionRow(name, details, card
             ? () => openCardSheet(card, { source }) : () => openMissingAlbumCard(item));
           if (card) row.dataset.collectionCard = card.id;
@@ -2015,14 +2150,8 @@
   function openMissingAlbumCard(item) {
     const body = document.createElement("div");
     body.className = "wallet-actions";
-    body.append(displayButton("Найти на Маркете", () => {
-      resetMarketFilters(item.name);
-      state.marketTab = "all";
-      closeSheet();
-      showPage("trade");
-      if (state.tradeToken) setMarketTab("all");
-      window.scrollTo(0, 0);
-    }, false));
+    body.append(displayButton("Найти на Маркете", () => findOnMarket(item.name), false),
+      displayButton(item.wanted ? "Настроить «Ищу»" : "Хочу эту карту", () => openWantedCard(item)));
     if (item.craft_price) {
       body.append(displayButton(`К созданию · ${item.craft_price} пыли`, () => {
         closeSheet();
@@ -2033,6 +2162,66 @@
       }));
     }
     openSheet(item.name, body);
+  }
+
+  function findOnMarket(name) {
+    resetMarketFilters(name);
+    state.marketTab = "all";
+    closeSheet();
+    showPage("trade");
+    if (state.tradeToken) setMarketTab("all");
+    window.scrollTo(0, 0);
+  }
+
+  function openWantedCard(item) {
+    const form = document.createElement("form");
+    form.className = "economy-search";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = Boolean(item.wanted?.notify);
+    const notify = document.createElement("label");
+    notify.append(checkbox, " Уведомить в Telegram о новом лоте");
+    const price = document.createElement("input");
+    price.className = "field";
+    price.type = "number";
+    price.min = "1";
+    price.step = "1";
+    price.inputMode = "numeric";
+    price.value = item.wanted?.max_start_price ?? "";
+    const maximum = document.createElement("label");
+    maximum.append("Максимальная стартовая цена в пыли", price);
+    const sync = () => {
+      maximum.hidden = !checkbox.checked;
+      price.disabled = maximum.hidden;
+    };
+    checkbox.addEventListener("change", sync);
+    sync();
+    const save = document.createElement("button");
+    save.className = "btn btn-primary btn-block";
+    save.textContent = item.wanted ? "Сохранить настройки" : "Добавить в «Ищу»";
+    form.append(notify, maximum, save);
+    let submitting = false;
+    const update = async (wanted) => {
+      if (submitting) return;
+      submitting = true;
+      save.disabled = true;
+      try {
+        const { wanted: result } = await api(`/api/market/wanted/${item.character_id}`, {
+          method: "POST", body: JSON.stringify({ wanted, notify: wanted && checkbox.checked,
+            max_start_price: wanted && checkbox.checked && price.value ? Number(price.value) : null }),
+        });
+        item.wanted = result;
+        loadCollectionAlbums(albums.page).catch(showError);
+        if (form.isConnected) openMissingAlbumCard(item);
+      } catch (error) { showError(error); }
+      finally { submitting = false; save.disabled = false; }
+    };
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      update(true);
+    });
+    if (item.wanted) form.append(displayButton("Убрать из «Ищу»", () => update(false)));
+    openSheet(item.name, form, null, () => openMissingAlbumCard(item));
   }
 
   function updateCopySelection() {
@@ -2098,27 +2287,48 @@
     }
   }
 
-  function reviewCollectionCopies() {
+  function dustReviewDetails(render, expanded) {
+    const details = document.createElement("details");
+    details.className = "dust-review-details";
+    const summary = document.createElement("summary");
+    summary.textContent = "Детали";
+    const list = document.createElement("div");
+    list.className = "collection-list";
+    const refresh = () => {
+      if (details.open) render(list);
+    };
+    details.append(summary, list);
+    details.addEventListener("toggle", refresh);
+    details.open = expanded;
+    return { details, refresh };
+  }
+
+  function reviewCollectionCopies(expanded = false) {
     if (copies.busy || !copies.selected.size) return;
     const cards = [...copies.selected.values()];
     const estimate = cards.reduce((total, card) => total + card.dust_value, 0);
     const body = document.createElement("div");
     body.className = "collection-list";
-    const selectedByCharacter = new Map();
-    for (const card of cards) {
-      selectedByCharacter.set(card.character_id, (selectedByCharacter.get(card.character_id) || 0) + 1);
-    }
-    for (const card of cards) {
-      const remain = card.owned_count - selectedByCharacter.get(card.character_id);
-      body.append(selectionReviewRow(card, `Останется: ${remain}`, () => {
-        copies.selected.delete(card.id);
-        const checkbox = el("collection-copy-items").querySelector(`[data-copy-id="${card.id}"]`);
-        if (checkbox) checkbox.checked = false;
-        updateCopySelection();
-        if (copies.selected.size) reviewCollectionCopies();
-        else closeSheet();
+    const review = dustReviewDetails((list) => {
+      const selectedByCharacter = new Map();
+      for (const card of cards) {
+        selectedByCharacter.set(card.character_id, (selectedByCharacter.get(card.character_id) || 0) + 1);
+      }
+      list.replaceChildren(...cards.map((card) => {
+        const remain = card.owned_count - selectedByCharacter.get(card.character_id);
+        const row = selectionReviewRow(card, `Останется: ${remain}`, () => {
+          if (copies.busy) return;
+          copies.selected.delete(card.id);
+          const checkbox = el("collection-copy-items").querySelector(`[data-copy-id="${card.id}"]`);
+          if (checkbox) checkbox.checked = false;
+          updateCopySelection();
+          if (copies.selected.size) reviewCollectionCopies(true);
+          else closeSheet();
+        });
+        row.querySelector("button").disabled = copies.busy;
+        return row;
       }));
-    }
+    }, expanded);
     const warning = document.createElement("p");
     warning.className = "hint";
     warning.textContent = "Действие нельзя отменить.";
@@ -2128,6 +2338,7 @@
       copies.busy = true;
       confirm.disabled = true;
       cancel.disabled = true;
+      review.refresh();
       updateCopySelection();
       let succeeded = false;
       try {
@@ -2149,14 +2360,14 @@
         updateCopySelection();
         confirm.disabled = false;
         cancel.disabled = false;
+        review.refresh();
       }
     });
     confirm.className = "btn btn-danger btn-block";
     const reward = document.createElement("strong");
     reward.className = "dust-review-reward";
     reward.textContent = `+${estimate} пыли`;
-    body.prepend(reward, warning);
-    body.append(confirm, cancel);
+    body.append(confirm, reward, warning, cancel, review.details);
     openSheet("Проверьте распыление", body);
   }
 
@@ -2170,7 +2381,7 @@
     return row;
   }
 
-  function reviewSelectedCards() {
+  function reviewSelectedCards(expanded = false) {
     const cards = [...state.collectionSelected.values()];
     if (!cards.length) return;
     const body = document.createElement("div");
@@ -2185,40 +2396,47 @@
     const reward = document.createElement("strong");
     reward.className = "dust-review-reward";
     reward.hidden = true;
-    body.append(reward, summary);
     let estimate;
     let submitting = false;
-    const rows = new Map();
+    let preview = null;
+    let blocked = new Set();
+    let protectedByOwner = new Set();
     const cleanup = displayButton("Оставить только доступные", () => {
       if (submitting) return;
-      for (const card of cards) {
-        if (!availableIds.has(card.id)) state.collectionSelected.delete(card.id);
-      }
+      for (const id of blocked) state.collectionSelected.delete(id);
       renderCollectionSelection();
       renderCollection();
-      if (state.collectionSelected.size) reviewSelectedCards();
+      if (state.collectionSelected.size) reviewSelectedCards(review.details.open);
       else closeSheet();
     });
     cleanup.hidden = true;
-    let availableIds = new Set();
-    for (const card of cards) {
-      const row = selectionReviewRow(card, "", () => {
-        if (submitting) return;
-        state.collectionSelected.delete(card.id);
-        renderCollectionSelection();
-        renderCollection();
-        if (state.collectionSelected.size) reviewSelectedCards();
-        else closeSheet();
-      });
-      rows.set(card.id, row);
-      body.append(row);
-    }
+    const review = dustReviewDetails((list) => {
+      list.replaceChildren(...cards.map((card) => {
+        let detail = "";
+        if (preview) {
+          detail = blocked.has(card.id) ? "Защищена от распыления" : `Останется: ${preview.remaining[card.character_id]}`;
+          if (protectedByOwner.has(card.id)) detail = "Включена отметка «Беречь экземпляр»";
+        }
+        const row = selectionReviewRow(card, detail, () => {
+          if (submitting) return;
+          state.collectionSelected.delete(card.id);
+          renderCollectionSelection();
+          renderCollection();
+          if (state.collectionSelected.size) reviewSelectedCards(true);
+          else closeSheet();
+        });
+        row.querySelector("button").disabled = submitting;
+        return row;
+      }));
+    }, expanded);
     const cancel = displayButton("Вернуться к выбору", () => { if (!submitting) closeSheet(); });
-    body.append(cleanup, confirm, cancel);
+    body.append(confirm, reward, summary, cleanup, cancel, review.details);
     confirm.addEventListener("click", async () => {
       if (confirm.disabled) return;
       submitting = true;
-      body.querySelectorAll("button").forEach((button) => { button.disabled = true; });
+      confirm.disabled = true;
+      cancel.disabled = true;
+      review.refresh();
       try {
         if (await dustSelected(cards, estimate)) {
           if (body.isConnected) closeSheet();
@@ -2227,14 +2445,14 @@
         }
       } finally {
         submitting = false;
-        rows.forEach((row) => { row.querySelector("button").disabled = false; });
-        cleanup.disabled = false;
         cancel.disabled = false;
+        review.refresh();
       }
     });
     const load = async () => {
       confirm.disabled = true;
       reward.hidden = true;
+      cleanup.hidden = true;
       summary.textContent = "Проверяем карты…";
       try {
         const result = await api("/api/dust/preview", {
@@ -2242,21 +2460,19 @@
           body: JSON.stringify({ card_ids: cards.map((card) => card.id) }),
         });
         if (!body.isConnected) return;
-        const blocked = new Map(result.protected.map((id) => [id, "Защищена от распыления"]));
-        availableIds = new Set(cards.filter((card) => !blocked.has(card.id)).map((card) => card.id));
-        cards.forEach((card) => {
-          const details = rows.get(card.id).querySelector(".hint");
-          details.textContent = [formatPrintNumber(card), blocked.get(card.id) ||
-            `Останется: ${result.remaining[card.character_id]}`].filter(Boolean).join(" · ");
-        });
+        preview = result;
+        blocked = new Set(result.protected);
+        protectedByOwner = new Set(result.dust_protected);
+        const hasAvailable = blocked.size < cards.length;
+        review.refresh();
         estimate = result.amount;
         reward.textContent = `+${estimate} пыли`;
         reward.hidden = Boolean(blocked.size);
-        summary.textContent = blocked.size ? `Недоступно: ${blocked.size}. ${availableIds.size
+        summary.textContent = blocked.size ? `Недоступно: ${blocked.size}. ${hasAvailable
           ? "Нажмите «Оставить только доступные», чтобы убрать их из выбора."
           : "Измените выбор карт."}`
           : [dustLossWarning(cards, result.remaining), "Действие нельзя отменить."].filter(Boolean).join(" ");
-        cleanup.hidden = !blocked.size || !availableIds.size;
+        cleanup.hidden = !blocked.size || !hasAvailable;
         confirm.textContent = blocked.size ? "Распыление недоступно" : `Распылить ${formatCardCount(cards.length, "карту")}`;
         confirm.disabled = Boolean(blocked.size);
       } catch (error) {
@@ -2271,7 +2487,8 @@
   function dustLossWarning(cards, remaining) {
     const warnings = [];
     if (Object.values(remaining).some((count) => count === 0)) warnings.push("Последние экземпляры выбранных персонажей исчезнут из коллекции.");
-    if (cards.some((card) => card.frame_style && card.frame_style !== "classic")) warnings.push("Закреплённые коллекционные рамки исчезнут.");
+    if (cards.some((card) => card.frame_bound)) warnings.push("Рамки, закреплённые навсегда, исчезнут вместе с картами.");
+    if (cards.some((card) => hasCustomFrame(card) && !card.frame_bound)) warnings.push("Съёмные рамки вернутся в инвентарь.");
     if (cards.some((card) => card.upgrade_level > 0)) warnings.push("Улучшения исчезнут без возврата пыли.");
     return warnings.join(" ");
   }
@@ -2349,16 +2566,7 @@
     body.className = "card-detail-content";
     const presentation = renderCardInspection(card, previousImageUrl);
     body.classList.toggle("card-upgrade-complete", revealUpgrade);
-    upgradeMask?.then((url) => {
-      if (!url || !presentation.isConnected || el("sheet").hidden) return;
-      const effect = document.createElement("span");
-      effect.className = "card-upgrade-effect";
-      effect.dataset.level = card.upgrade_level;
-      effect.setAttribute("aria-hidden", "true");
-      effect.style.setProperty("--upgrade-mask", `url("${url}")`);
-      effect.addEventListener("animationend", () => effect.remove(), { once: true });
-      presentation.querySelector("img").after(effect);
-    });
+    if (revealUpgrade || card.upgrade_level > 1) attachUpgradeEffect(presentation, card, revealUpgrade, upgradeMask);
     const actions = document.createElement("div");
     actions.className = "sheet-actions";
     const otherActions = document.createElement("div");
@@ -2403,12 +2611,13 @@
           return;
         }
         state.selected = new Map([[card.id, card]]);
+        saveTradeDraft([card.id]);
         state.marketTab = "trade";
         closeSheet();
         showPage("trade");
       })],
       ["Передать", "secondary", () => openTransferComposer([card], () => openCardSheet(card, { source }))],
-      [`Распылить за ${card.dust_value} пыли`, "danger", () => withFirstTip("dust", "Первое распыление",
+      [card.dust_protected ? "Карта защищена от распыления" : `Распылить за ${card.dust_value} пыли`, "danger", () => withFirstTip("dust", "Первое распыление",
         "Карта исчезнет из коллекции, а пыль поступит в кошелёк. Действие потребует подтверждения.", async () => {
         state.collectionSelected = new Map([[card.id, card]]);
         reviewSelectedCards();
@@ -2421,12 +2630,25 @@
       button.textContent = label;
       const favoriteAction = label.startsWith("★") || label.startsWith("☆");
       if (favoriteAction) button.setAttribute("aria-pressed", String(isFavorite));
-      if (card.lock_reason && !favoriteAction) {
+      if ((card.lock_reason && !favoriteAction) || (kind === "danger" && card.dust_protected)) {
         button.disabled = true;
       }
       button.addEventListener("click", () => handler(button));
       (favoriteAction ? actions : otherActions).append(button);
     });
+    const protection = displayButton(card.dust_protected ? "Снять защиту от распыления" : "Беречь экземпляр", async () => {
+      protection.disabled = true;
+      try {
+        const { card: updated } = await api(`/api/cards/${card.id}/dust-protection`, {
+          method: "POST", body: JSON.stringify({ protected: !card.dust_protected }),
+        });
+        applyCardUpdate(updated);
+        if (body.isConnected) openCardSheet(updated, { source });
+      } finally { protection.disabled = Boolean(card.lock_reason); }
+    });
+    protection.disabled = Boolean(card.lock_reason);
+    protection.setAttribute("aria-pressed", String(card.dust_protected));
+    otherActions.prepend(protection);
     const level = card.upgrade_level || 0;
     const upgradePrice = state.profile?.economy?.upgrade_prices[level];
     const upgradeEffect = state.profile?.economy?.upgrade_effects?.[level];
@@ -2439,9 +2661,7 @@
       if (missing) upgrade.textContent += ` · не хватает ${missing}`;
       upgrade.disabled = Boolean(card.lock_reason);
       upgrade.addEventListener("click", () => {
-        if (state.balance < upgradePrice) {
-          openWallet("dust", { missing: upgradePrice - state.balance, onBack: () => openCardSheet(card, { source }) });
-        } else upgradeCard(card, upgrade, upgradePrice, source);
+        openUpgradePreview(card, upgradePrice, upgradeEffect, source);
       });
       actions.append(upgrade);
     }
@@ -2454,8 +2674,8 @@
     const manageFrame = document.createElement("button");
     manageFrame.type = "button";
     manageFrame.className = "btn btn-secondary btn-block card-frame-manage";
-    manageFrame.textContent = hasCustomFrame(card) ? "Сменить или снять рамку" : "Надеть рамку";
-    manageFrame.disabled = Boolean(card.lock_reason);
+    manageFrame.textContent = card.frame_bound ? "Рамка закреплена" : "Примерить рамку";
+    manageFrame.disabled = Boolean(card.lock_reason || card.frame_bound);
     manageFrame.addEventListener("click", () => withFirstTip("frame", "Первая примерка",
       "Здесь можно примерить свои рамки. Если передать карту с коллекционной рамкой, она уйдёт вместе с картой.",
       () => openFramePicker(card, { onBack: (updated) => openCardSheet(updated, { source }) })));
@@ -2561,8 +2781,8 @@
     state.shopFrames = shop.items;
     state.framePacks = shop.packs;
     state.frameRecycle = shop.recycle;
-    setCrystals(shop.crystals);
-    setBalance(shop.balance);
+    setCrystals(shop.crystals, shop);
+    setBalance(shop.balance, shop);
     return state.shopFrames;
   }
 
@@ -2842,9 +3062,11 @@
       selected = frame;
       const current = frame.id === card.frame_style;
       gallery.update(frame.id, card.frame_style, reveal);
-      apply.disabled = current || !frame.available || Boolean(card.lock_reason);
-      apply.textContent = current ? "Уже на карте" : !frame.available ? "Нет свободных экземпляров"
-        : frame.id === "classic" ? "Снять рамку" : "Надеть рамку";
+      const classicOnCard = current && frame.id === "classic";
+      apply.disabled = classicOnCard || (!current && !frame.available) || Boolean(card.lock_reason || card.frame_bound);
+      apply.textContent = card.frame_bound ? "Рамка закреплена"
+        : classicOnCard ? "Уже на карте" : !current && !frame.available ? "Нет свободных экземпляров"
+          : frame.id === "classic" ? "Снять рамку" : "Закрепить навсегда";
       fitting.render(frame, card);
     }
 
@@ -2854,6 +3076,12 @@
       apply.disabled = true;
       apply.textContent = "Сохраняем…";
       try {
+        if (selected.id !== "classic" && !await confirmAction(
+          `Закрепить рамку «${selected.title}» на ${card.name} ${formatPrintNumber(card)} навсегда? Её нельзя будет снять или заменить.`)) {
+          saving = false;
+          if (isOpen()) selectFrame(selected);
+          return;
+        }
         const updated = await equipFrame(card, selected);
         if (isOpen()) onBack(updated);
       } catch (error) {
@@ -2976,15 +3204,16 @@
         if (body.isConnected && !el("sheet").hidden) closeSheet();
         showNotice(`Ставка ${bidAmount} пыли принята.`);
         haptic("success");
-        loadMarket().catch(showError);
+        if (state.marketTab === "bids") loadMyBids(state.myBidsPage).catch(showError);
+        else loadMarket(state.marketPage, { listingId: listing.id }).catch(showError);
       } catch (error) {
         try {
           const updated = await api(`/api/market/${listing.id}`);
           if (!body.isConnected || el("sheet").hidden) return;
-          setBalance(updated.balance);
+          setBalance(updated.balance, updated);
           if (updated.listing.status === "active") openBidSheet(updated.listing, input.value, error.message);
           else openSheet(`Аукцион #${listing.id}`, listingCard(updated.listing));
-          loadMarket().catch(showError);
+          loadMarket(state.marketPage, { listingId: listing.id }).catch(showError);
         } catch (_refreshError) { showError(error); }
       } finally { local.disabled = false; updateAmount(); }
     };
@@ -3008,18 +3237,23 @@
     openSheet("Ставка", body);
   }
 
-  function listingCard(listing, { mine = false } = {}) {
+  function listingCard(listing, { mine = false, detail = false, bids = false } = {}) {
     const item = document.createElement("article");
     item.className = "listing";
+    item.dataset.listingId = String(listing.id);
     const active = listing.status === "active";
     if (listing.card && (active || listing.highest_bidder_is_me && state.profile?.id !== listing.seller_id && !listing.viewer_has_bid)) {
       item.append(cardButton(listing.card, false, true, null, ""));
     }
     const body = document.createElement("div");
     body.className = "listing-body";
-    const title = document.createElement("strong");
+    const title = document.createElement(detail ? "strong" : "button");
     title.className = "listing-title";
     title.textContent = listing.card?.name || `Лот #${listing.id}`;
+    if (!detail) {
+      title.type = "button";
+      title.addEventListener("click", () => openAuctionListing(listing.id).catch(showError));
+    }
     const rarity = document.createElement("span");
     rarity.className = "listing-rarity";
     rarity.textContent = listing.card?.rarity_title || "";
@@ -3038,24 +3272,34 @@
     current.append(dust, price.toLocaleString("ru-RU"));
     current.setAttribute("aria-label", `${listing.current_bid === null ? "Старт" : "Текущая ставка"}: ${price} пыли`);
     offer.append(current);
-    const bids = document.createElement("div");
-    bids.className = "listing-meta";
-    bids.textContent = `Ставок: ${listing.bid_count}`;
+    const bidCount = document.createElement("div");
+    bidCount.className = "listing-meta";
+    bidCount.textContent = `Ставок: ${listing.bid_count}`;
     const details = document.createElement("span");
     details.className = "listing-meta";
     details.textContent = [active ? `Следующая ставка от ${listing.minimum_bid} пыли` : "",
-      listing.card && hasCustomFrame(listing.card) ? `Рамка: ${listing.card.style_title}` : ""].filter(Boolean).join(" · ");
+      listing.card && hasCustomFrame(listing.card) ? `Рамка: ${equippedFrameLabel(listing.card)}` : ""].filter(Boolean).join(" · ");
     body.append(title);
     if (listing.card) body.append(rarity, printNumberLabel(listing.card));
-    body.append(time, bids);
+    body.append(time, bidCount);
     if (details.textContent) body.append(details);
     if (listing.highest_bidder_is_me || listing.viewer_has_bid) {
       const lead = document.createElement("span");
       lead.className = "lead-badge";
-      lead.textContent = listing.highest_bidder_is_me ? (active ? "Вы лидируете" : "Вы выиграли") : "Ставку перебили";
+      lead.textContent = active ? (listing.highest_bidder_is_me ? "Лидируете" : "Перебито")
+        : listing.highest_bidder_is_me && listing.status === "sold" ? "Выиграно" : "Завершено";
       body.append(lead);
     }
+    if (bids) {
+      const reserved = document.createElement("span");
+      reserved.className = "listing-meta";
+      const amount = active && listing.highest_bidder_is_me ? listing.current_bid : 0;
+      reserved.textContent = `В резерве: ${amount.toLocaleString("ru-RU")} пыли`;
+      body.append(reserved);
+    }
     if (mine) {
+      const share = displayButton("Поделиться", () => showAuctionShare(listing.id));
+      offer.append(share);
       if (listing.can_cancel) {
         const cancel = document.createElement("button");
         cancel.type = "button";
@@ -3066,7 +3310,7 @@
             await api(`/api/listings/${listing.id}`, { method: "DELETE" });
             state.collectionVisited = false;
             if (state.activePage === "collection") refreshCollection();
-            await loadMyListings();
+            await loadMyListings(state.myListingsPage);
             showNotice(`Аукцион #${listing.id} отменён.`);
           } catch (error) { showError(error); }
         });
@@ -3085,38 +3329,95 @@
     return item;
   }
 
+  async function openAuctionListing(id, { sharedKey, back } = {}) {
+    const path = sharedKey ? `/api/market/shared/${encodeURIComponent(sharedKey)}` : `/api/market/${id}`;
+    const result = await api(path);
+    setBalance(result.balance, result);
+    const listing = result.listing;
+    openSheet(`Аукцион #${listing.id}`, listingCard(listing, { detail: true }), null, back);
+  }
+
+  async function showAuctionShare(id) {
+    const { link } = await api(`/api/market/${id}/share`, { method: "POST" });
+    const body = document.createElement("div");
+    body.className = "collection-list";
+    const field = document.createElement("input");
+    field.className = "field";
+    field.readOnly = true;
+    field.value = link;
+    field.setAttribute("aria-label", "Ссылка на аукцион");
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}`;
+    body.append(field, displayButton("Копировать ссылку", async () => {
+      try {
+        await navigator.clipboard.writeText(link);
+        showNotice("Ссылка скопирована.");
+      } catch (_error) { field.focus(); field.select(); }
+    }), displayButton("Поделиться в Telegram", () => {
+      if (tg?.openTelegramLink) tg.openTelegramLink(shareUrl);
+      else window.open(shareUrl, "_blank", "noopener");
+    }));
+    openSheet(`Поделиться лотом #${id}`, body);
+  }
+
   const marketFilters = () => [...document.querySelectorAll("[data-market-filter]")];
   function resetMarketFilters(query = "") {
     el("market-search").value = query;
     marketFilters().forEach((button) => button.setAttribute("aria-pressed", "false"));
+    state.marketPage = 1;
+    state.marketHasNext = false;
   }
 
-  async function loadMarket(page = 1) {
+  function renderListPager(name, page, hasNext, busy = false) {
+    el(`${name}-pages`).hidden = page === 1 && !hasNext;
+    el(`${name}-prev`).disabled = busy || page === 1;
+    el(`${name}-next`).disabled = busy || !hasNext;
+    el(`${name}-page-number`).textContent = `Страница ${page}`;
+  }
+
+  async function loadMarket(page = 1, { listingId, scrollToList = false } = {}) {
     const version = state.marketVersion = (state.marketVersion || 0) + 1;
     const container = el("market-cards");
-    const more = el("market-more");
+    const selector = listingId && `[data-listing-id="${listingId}"]`;
+    const previousTop = selector ? container.querySelector(selector)?.getBoundingClientRect().top : undefined;
     const query = el("market-search").value.trim();
     const params = new URLSearchParams({ page, q: query });
     marketFilters().forEach((button) => {
       if (button.getAttribute("aria-pressed") === "true") params.set(button.dataset.marketFilter, "1");
     });
-    more.disabled = true;
-    if (page === 1) {
-      more.hidden = true;
-      container.textContent = "Загружаем лоты…";
-    }
+    renderListPager("market", state.marketPage, state.marketHasNext, true);
+    container.setAttribute("aria-busy", "true");
+    if (!container.hasChildNodes()) container.textContent = "Загружаем лоты…";
+    const fetchPage = (number) => {
+      params.set("page", number);
+      return api(`/api/market?${params}`);
+    };
     try {
-      const data = await api(`/api/market?${params}`);
+      let data = await fetchPage(page);
       if (version !== state.marketVersion) return;
-      if (page === 1) {
-        state.marketItems = [];
-        container.replaceChildren();
+      if (page > 1 && !data.items.length) {
+        let lower = 1;
+        let upper = page - 1;
+        data = await fetchPage(upper);
+        if (version !== state.marketVersion) return;
+        if (data.items.length) page = upper;
+        else {
+          page = 1;
+          data = await fetchPage(page);
+          if (version !== state.marketVersion) return;
+          upper -= 1;
+          while (data.next_page && upper > lower) {
+            const candidate = Math.ceil((lower + upper) / 2);
+            const result = await fetchPage(candidate);
+            if (version !== state.marketVersion) return;
+            if (result.items.length) {
+              lower = page = candidate;
+              data = result;
+            } else upper = candidate - 1;
+          }
+        }
       }
-      const seen = new Set(state.marketItems.map((listing) => listing.id));
-      const items = data.items.filter((listing) => !seen.has(listing.id));
-      state.marketItems.push(...items);
-      container.append(...items.map((listing) => listingCard(listing)));
-      if (!state.marketItems.length) {
+      container.replaceChildren(...data.items.map((listing) => listingCard(listing)));
+      if (!data.items.length) {
         const empty = document.createElement("div");
         empty.className = "empty-state";
         const filtered = query || [...params.keys()].length > 2;
@@ -3131,25 +3432,55 @@
         }
         container.append(empty);
       }
-      state.marketNextPage = data.next_page;
-      more.hidden = !data.next_page;
+      state.marketPage = page;
+      state.marketHasNext = Boolean(data.next_page);
       updateAuctionCountdowns();
+      if (state.activePage === "trade" && state.marketTab === "all") {
+        const replacement = selector && container.querySelector(selector);
+        if (replacement && previousTop !== undefined) {
+          window.scrollBy(0, replacement.getBoundingClientRect().top - previousTop);
+        } else if (scrollToList || listingId) container.scrollIntoView({ block: "start" });
+      }
     } catch (error) {
       if (version !== state.marketVersion) return;
-      if (page === 1) container.replaceChildren(displayButton("Повторить загрузку лотов", () => loadMarket()));
+      const retry = displayButton("Повторить загрузку лотов", () => loadMarket(page, { listingId, scrollToList }));
+      retry.dataset.marketRetry = "";
+      container.querySelector("[data-market-retry]")?.remove();
+      if (container.querySelector(".listing")) container.prepend(retry);
+      else container.replaceChildren(retry);
       throw error;
     } finally {
-      if (version === state.marketVersion) more.disabled = false;
+      if (version === state.marketVersion) {
+        container.removeAttribute("aria-busy");
+        renderListPager("market", state.marketPage, state.marketHasNext);
+      }
     }
   }
 
-  async function loadMyListings() {
+  async function loadMyListings(page = 1) {
     const container = el("my-market-listings");
+    const version = state.myListingsVersion = (state.myListingsVersion || 0) + 1;
+    renderListPager("my-listings", state.myListingsPage, state.myListingsHasNext, true);
+    container.setAttribute("aria-busy", "true");
     let data;
-    try { data = await api("/api/listings"); }
-    catch (error) {
-      container.replaceChildren(displayButton("Повторить загрузку лотов", loadMyListings));
+    try {
+      data = await api(`/api/listings?page=${page}`);
+      if (version !== state.myListingsVersion) return;
+      if (page > 1 && !data.items.length) {
+        await loadMyListings(page - 1);
+        return;
+      }
+      state.myListingsPage = page;
+      state.myListingsHasNext = Boolean(data.next_page);
+    } catch (error) {
+      if (version !== state.myListingsVersion) return;
+      container.replaceChildren(displayButton("Повторить загрузку лотов", () => loadMyListings(page)));
       throw error;
+    } finally {
+      if (version === state.myListingsVersion) {
+        container.removeAttribute("aria-busy");
+        renderListPager("my-listings", state.myListingsPage, state.myListingsHasNext);
+      }
     }
     container.replaceChildren();
     const create = el("create-lot");
@@ -3166,6 +3497,38 @@
     updateAuctionCountdowns();
   }
 
+  async function loadMyBids(page = 1) {
+    const container = el("my-bid-listings");
+    const version = state.myBidsVersion = (state.myBidsVersion || 0) + 1;
+    renderListPager("my-bids", state.myBidsPage || 1, state.myBidsHasNext, true);
+    container.setAttribute("aria-busy", "true");
+    try {
+      const data = await api(`/api/market/bids?page=${page}`);
+      if (version !== state.myBidsVersion) return;
+      if (page > 1 && !data.items.length) return loadMyBids(page - 1);
+      state.myBidsPage = page;
+      state.myBidsHasNext = Boolean(data.next_page);
+      const items = data.items.map((listing) => listingCard(listing, { bids: true }));
+      if (!items.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty-state";
+        empty.textContent = "Вы ещё не делали ставок.";
+        items.push(empty);
+      }
+      container.replaceChildren(...items);
+      updateAuctionCountdowns();
+    } catch (error) {
+      if (version !== state.myBidsVersion) return;
+      container.replaceChildren(displayButton("Повторить загрузку ставок", () => loadMyBids(page)));
+      throw error;
+    } finally {
+      if (version === state.myBidsVersion) {
+        container.removeAttribute("aria-busy");
+        renderListPager("my-bids", state.myBidsPage || 1, state.myBidsHasNext);
+      }
+    }
+  }
+
   function setMarketTab(name, initial = false) {
     state.marketTab = name;
     document.querySelectorAll("[data-market-tab]").forEach((button) => {
@@ -3175,15 +3538,17 @@
     });
     el("market-pane").hidden = name !== "all";
     el("mine-pane").hidden = name !== "mine";
+    el("bids-pane").hidden = name !== "bids";
     el("trade-pane").hidden = name !== "trade";
-    if (name === "all") loadMarket().catch(showError);
-    if (name === "mine") loadMyListings().catch(showError);
+    if (name === "all") loadMarket(state.marketPage).catch(showError);
+    if (name === "mine") loadMyListings(state.myListingsPage).catch(showError);
+    if (name === "bids") loadMyBids(state.myBidsPage).catch(showError);
     if (name === "trade") {
       if (state.tradeToken) {
         render();
         loadTrade().catch(showError);
       }
-      else loadInventory().catch(showError);
+      else loadInventory(state.page).catch(showError);
     }
     if (!initial) haptic("light");
   }
@@ -3246,21 +3611,28 @@
     const input = body.querySelector("#craft-query");
     const results = body.querySelector("#craft-results");
     const status = body.querySelector("#craft-search-status");
+    const pager = body.querySelector("#craft-pages");
+    const prev = body.querySelector("#craft-prev");
     const next = body.querySelector("#craft-next");
+    const pageNumber = body.querySelector("#craft-page-number");
     let version = 0;
     let timer = 0;
+    let page = 1;
+    let cursors = [0];
     let nextAfter = null;
     const isOpen = () => body.isConnected && !el("sheet").hidden;
-    const load = async (after = 0) => {
+    const load = async (target = 1) => {
       if (!isOpen()) return;
       const request = ++version;
       const search = input.value.trim();
-      if (!after) results.replaceChildren();
+      const after = cursors[target - 1];
       status.textContent = "Ищем персонажей…";
-      next.hidden = true;
+      prev.disabled = true;
+      next.disabled = true;
       try {
         const data = await api(`/api/craft?${new URLSearchParams({ rarity, q: search, after })}`);
         if (!isOpen() || request !== version) return;
+        results.replaceChildren();
         for (const character of data.items) {
           const button = displayButton(character.name, () => createCharacterCard(character, search));
           button.classList.add("craft-character");
@@ -3272,11 +3644,24 @@
         }
         status.textContent = data.items.length ? (state.profile.economy.craft_available ? "" : el("craft-status").textContent)
           : "Персонажи не найдены.";
+        const changed = page !== target;
+        page = target;
         nextAfter = data.next_after;
-        next.hidden = nextAfter === null;
+        pageNumber.textContent = `Страница ${page}`;
+        pager.hidden = page === 1 && nextAfter === null;
+        prev.disabled = page === 1;
+        next.disabled = nextAfter === null;
+        if (changed) results.scrollIntoView({ block: "start" });
       } catch (_error) {
-        if (isOpen() && request === version) status.replaceChildren(displayButton("Повторить поиск", () => load(after)));
+        if (isOpen() && request === version) status.replaceChildren(displayButton("Повторить поиск", () => load(target)));
       }
+    };
+    const reset = () => {
+      page = 1;
+      cursors = [0];
+      results.replaceChildren();
+      pager.hidden = true;
+      return load();
     };
     input.value = query;
     input.addEventListener("input", () => {
@@ -3284,15 +3669,19 @@
       version += 1;
       results.replaceChildren();
       status.textContent = "Ищем персонажей…";
-      next.hidden = true;
-      timer = setTimeout(load, 260);
+      pager.hidden = true;
+      timer = setTimeout(reset, 260);
     });
     body.querySelector("form").addEventListener("submit", (event) => {
       event.preventDefault();
       clearTimeout(timer);
-      load();
+      reset();
     });
-    next.addEventListener("click", () => load(nextAfter));
+    prev.addEventListener("click", () => load(page - 1));
+    next.addEventListener("click", () => {
+      cursors[page] = nextAfter;
+      load(page + 1);
+    });
     openSheet(`${title} · ${price} пыли`, body);
     input.focus({ preventScroll: true });
     load();
@@ -3342,7 +3731,77 @@
     }
   }
 
-  async function upgradeCard(card, button, price, source) {
+  function attachUpgradeEffect(container, card, pulse = false, mask = loadUpgradeMask(card)) {
+    mask.then((url) => {
+      if (!url || !container.isConnected || el("sheet").hidden) return;
+      const effect = document.createElement("span");
+      effect.className = "card-upgrade-effect";
+      effect.dataset.level = card.upgrade_level;
+      effect.setAttribute("aria-hidden", "true");
+      effect.style.setProperty("--upgrade-mask", `url("${url}")`);
+      if (pulse) {
+        effect.addEventListener("animationend", () => {
+          if (card.upgrade_level > 1) effect.classList.add("is-live");
+          else effect.remove();
+        }, { once: true });
+      } else effect.classList.add("is-live");
+      container.append(effect);
+    });
+  }
+
+  function openUpgradePreview(card, price, effect, source) {
+    const level = (card.upgrade_level || 0) + 1;
+    const body = document.createElement("div");
+    body.className = "collection-list";
+    const compare = document.createElement("div");
+    compare.className = "upgrade-compare";
+    const note = document.createElement("p");
+    note.className = "hint";
+    note.textContent = `${effect?.description || "Новый эффект."} При распылении карты траты на улучшение не возвращаются.`;
+    const confirm = displayButton(`Улучшить за ${price.toLocaleString("ru-RU")} пыли`, () => {
+      if (state.balance < price) {
+        openWallet("dust", { missing: price - state.balance,
+          onBack: () => openUpgradePreview(card, price, effect, source) });
+      } else upgradeCard(card, confirm, price, source, compare.querySelector("img")?.currentSrc);
+    }, false);
+    const status = document.createElement("p");
+    status.className = "hint";
+    status.setAttribute("role", "status");
+    status.textContent = "Готовим примерку…";
+    confirm.disabled = true;
+    body.append(compare, note, status, confirm);
+    openSheet(effect?.title || "Улучшение карты", body, null, () => openCardSheet(card, { source }));
+    const mask = level > 1 ? loadUpgradeMask(card) : null;
+    const images = [["До", null], ["После", level]].map(async ([label, previewLevel]) => {
+      const figure = document.createElement("figure");
+      const caption = document.createElement("figcaption");
+      caption.textContent = label;
+      const visual = document.createElement("div");
+      visual.className = "upgrade-compare-visual";
+      figure.append(visual, caption);
+      compare.append(figure);
+      const url = await loadCardImageUrl(card, "", card.frame_style, false, previewLevel);
+      if (!body.isConnected) return;
+      const image = document.createElement("img");
+      image.src = url;
+      image.alt = `${card.name} · ${label}`;
+      await image.decode();
+      if (!body.isConnected) return;
+      visual.append(image);
+      const visualLevel = previewLevel ?? card.upgrade_level;
+      if (visualLevel > 1) attachUpgradeEffect(visual, { ...card, upgrade_level: visualLevel }, false, mask);
+    });
+    Promise.all(images).then(() => {
+      if (!body.isConnected) return;
+      status.textContent = "";
+      confirm.disabled = Boolean(card.lock_reason);
+    }).catch(() => {
+      if (body.isConnected) status.replaceChildren(displayButton("Повторить примерку",
+        () => openUpgradePreview(card, price, effect, source)));
+    });
+  }
+
+  async function upgradeCard(card, button, price, source, previousImageUrl) {
     if (state.economyBusy) return;
     state.economyBusy = true;
     button.disabled = true;
@@ -3350,11 +3809,7 @@
     try {
       const effect = state.profile?.economy?.upgrade_effects?.[card.upgrade_level || 0];
       const upgradeMask = loadUpgradeMask(card);
-      if (!await showShopDialog({ title: "Эффект иллюстрации", item: effect?.title || card.name,
-        description: `${effect?.description || "Улучшение визуального эффекта."} Меняется только иллюстрация. Эффект передаётся с картой; при распылении стоимость улучшения не возвращается.`,
-        art: "frame", price, currency: "dust", actionLabel: "Улучшить карту" })) return;
       button.textContent = "Улучшаем карту…";
-      const previewImage = button.closest("#sheet-body")?.querySelector(".sheet-card > img");
       const result = await api(`/api/cards/${card.id}/upgrade`, { method: "POST",
         body: JSON.stringify({ expected_level: card.upgrade_level || 0 }) });
       setBalance(result.balance);
@@ -3363,7 +3818,7 @@
         openCardSheet(result.card, {
           source,
           revealUpgrade: true,
-          previousImageUrl: previewImage?.currentSrc,
+          previousImageUrl,
           upgradeMask: result.card.frame_style === card.frame_style
             ? upgradeMask : loadUpgradeMask(result.card),
         });
@@ -3441,6 +3896,7 @@
     el("gems-pane").hidden = name !== "gems";
     if (name === "frames" && load) loadFrameShop().catch(showError);
     if (name === "cases") loadCaseCatalog().catch(showError);
+    if (name === "gems") resumeStarPayment();
     renderEconomyStatus();
   }
 
@@ -3703,9 +4159,7 @@
   function closePlayerProfile() {
     publicProfileRequest += 1;
     state.publicPlayer = null;
-    state.publicInventoryPage = 0;
     state.publicInventoryLoading = false;
-    state.publicInventoryIds.clear();
     showPage("account");
     window.scrollTo({ top: 0 });
   }
@@ -3724,9 +4178,9 @@
       return preview;
     }));
     el("player-showcases-section").hidden = !showcases.length;
-    state.publicInventoryPage = 0;
+    state.publicInventoryPage = 1;
+    state.publicInventoryPages = 1;
     state.publicInventoryLoading = false;
-    state.publicInventoryIds.clear();
     el("player-name").textContent = profile.display_name;
     el("player-id").textContent = `ID ${profile.id}`;
     setProfileAvatar("player-avatar", profile);
@@ -3768,8 +4222,7 @@
     el("player-collection-section").hidden = !showCollection;
     el("player-collection-hidden").hidden = showCollection;
     el("player-cards").replaceChildren();
-    el("player-more").hidden = true;
-    el("player-more").disabled = false;
+    renderListPager("player-collection", 1, false);
     el("player-collection-count").textContent = showCollection
       ? `${profile.card_count} карт` : "";
     showPage("player");
@@ -3777,38 +4230,42 @@
       loadBackgrounds().then(syncAppBackground);
     }
     window.scrollTo({ top: 0 });
-    if (showCollection) await loadPublicInventory(true);
+    if (showCollection) await loadPublicInventory();
   }
 
-  async function loadPublicInventory(reset = false) {
+  async function loadPublicInventory(page = 1) {
     if (!state.publicPlayer || state.publicInventoryLoading) return;
-    const playerId = state.publicPlayer.id;
-    const page = reset ? 1 : state.publicInventoryPage + 1;
-    const moreButton = el("player-more");
+    const profile = state.publicPlayer;
+    const grid = el("player-cards");
+    const currentPage = state.publicInventoryPage;
+    const pagerName = "player-collection";
     state.publicInventoryLoading = true;
-    moreButton.disabled = true;
+    renderListPager(pagerName, currentPage, currentPage < state.publicInventoryPages, true);
+    grid.setAttribute("aria-busy", "true");
     try {
       const result = await api(
-        `/api/players/${playerId}/inventory?page=${page}`);
-      if (!state.publicPlayer || state.publicPlayer.id !== playerId) return;
-      if (reset) {
-        el("player-cards").replaceChildren();
-        state.publicInventoryIds.clear();
-      }
-      result.items.forEach((card) => {
-        // Защита от повторов: медленная сеть или повторное нажатие
-        // не должны добавлять уже показанную карту второй раз.
-        if (state.publicInventoryIds.has(card.id)) return;
-        state.publicInventoryIds.add(card.id);
-        el("player-cards").append(cardButton(card, false, false, null, ""));
-      });
+        `/api/players/${profile.id}/inventory?page=${page}`);
+      if (state.publicPlayer !== profile) return;
+      grid.replaceChildren(...result.items.map((card) => cardButton(card, false, false, null, "")));
       state.publicInventoryPage = result.page;
+      state.publicInventoryPages = result.pages;
       el("player-collection-count").textContent = `${result.total} карт`;
-      moreButton.hidden = result.page >= result.pages;
+      if (page !== currentPage && state.activePage === "player") {
+        el("player-collection-section").scrollIntoView({ block: "start" });
+      }
+    } catch (error) {
+      if (state.publicPlayer !== profile) return;
+      if (!grid.querySelector(".card")) {
+        const retry = displayButton("Повторить загрузку карт", () => loadPublicInventory(page));
+        retry.style.gridColumn = "1 / -1";
+        grid.replaceChildren(retry);
+      }
+      throw error;
     } finally {
-      if (!state.publicPlayer || state.publicPlayer.id === playerId) {
+      if (state.publicPlayer === profile) {
         state.publicInventoryLoading = false;
-        moreButton.disabled = false;
+        grid.removeAttribute("aria-busy");
+        renderListPager(pagerName, state.publicInventoryPage, state.publicInventoryPage < state.publicInventoryPages);
       }
     }
   }
@@ -4035,12 +4492,17 @@
     renderCaseProgress();
   }
 
+  let caseCatalogRevision = 0;
   async function loadCaseCatalog() {
     if (state.caseOpening) return;
+    const revision = ++caseCatalogRevision;
     try {
-      state.caseCatalog = await api("/api/cases");
+      const result = await api("/api/cases");
+      if (revision !== caseCatalogRevision) return;
+      state.caseCatalog = result;
       el("case-loading-status").replaceChildren();
     } catch (error) {
+      if (revision !== caseCatalogRevision) return;
       el("case-loading-status").replaceChildren(displayButton("Повторить загрузку кейсов", loadCaseCatalog));
       throw error;
     }
@@ -4051,7 +4513,15 @@
       if (reward.frame_id) tile.lastElementChild.dataset.caseFrame = reward.frame_id;
       return tile;
     }));
+    renderLastCaseReward();
     updateCaseButton();
+  }
+
+  function renderLastCaseReward() {
+    const button = el("case-last-reward");
+    const result = state.caseCatalog?.last_reward;
+    button.hidden = !result;
+    if (result) button.textContent = `Последняя награда · ${caseRewardSummary(result)}`;
   }
 
   function rewardTile(title, imageUrl, subtitle, note, action, resource = false) {
@@ -4104,11 +4574,7 @@
       const missing = state.caseCatalog.progress.missing_frames.some(({ id }) => id === reward.frame_id);
       description.append("Рамка · ", frameRarityBadge(reward),
         missing ? " · В коллекции пока нет" : " · Уже в коллекции");
-      const tryOn = displayButton("Примерить на карте", () => {
-        const frames = state.caseCatalog.rewards.filter((item) => item.frame_id)
-          .map((item) => ({ ...item, id: item.frame_id }));
-        previewFrameOnCard(reward.frame_id, frames, "Рамки премиум-кейса");
-      });
+      const tryOn = displayButton("Примерить на карте", () => tryCaseFrame(reward.frame_id));
       body.append(tryOn);
     } else {
       description.textContent = reward.id === "dust" ? `${reward.quantity} пыли` : `${reward.quantity} ${ticketWord(Number(reward.quantity))}`;
@@ -4117,18 +4583,20 @@
   }
 
   function caseRewardSummary(result) {
-    if (result.reward === "dust") return `Получено ${result.amount} игровой пыли`;
-    if (result.reward.startsWith("roll_")) {
-      return result.amount === 1
-        ? "Получена 1 дополнительная крутка"
-        : `Получено дополнительных круток: ${result.amount}`;
-    }
+    if (result.reward === "dust") return `+${result.amount} пыли`;
+    if (result.reward.startsWith("roll_")) return `+${result.amount} ${ticketWord(result.amount)}`;
     if (result.duplicate) {
       return result.frame_copies_awarded
-        ? `Получена ещё одна рамка «${result.frame_title}»`
+        ? `«${result.frame_title}» · Ещё один экземпляр`
         : `Дубликат рамки «${result.frame_title}» · ${result.amount} пыли`;
     }
-    return `Получена рамка «${result.frame_title}»`;
+    return result.frame_title ? `Рамка «${result.frame_title}»` : "Коллекционная рамка";
+  }
+
+  function tryCaseFrame(frameId) {
+    const frames = state.caseCatalog.rewards.filter((item) => item.frame_id)
+      .map((item) => ({ ...item, id: item.frame_id }));
+    previewFrameOnCard(frameId, frames, "Рамки премиум-кейса");
   }
 
   function casePrizeImage(reward, preview) {
@@ -4138,6 +4606,38 @@
     return new URL("game-icon-summon-clear.webp", staticBase).href;
   }
 
+  const caseBackdrop = () => new URL("case-moonlit-clearing.webp", staticBase);
+
+  function showCaseAward(result, announce = true) {
+    const legacyDuplicate = result.duplicate && !result.frame_copies_awarded;
+    const resource = legacyDuplicate || !result.frame_id;
+    const imageUrl = casePrizeImage(legacyDuplicate ? "dust" : result.reward,
+      legacyDuplicate ? null : result.frame_preview_url);
+    const fx = resource ? null : frameEffects({
+      effect: result.frame_effect, rarity: result.frame_rarity, accent: result.frame_accent,
+      ornament_url: result.frame_ornament_url, style: result.frame_theme,
+      motion_url: result.frame_motion_url, rarity_badge_box: result.frame_rarity_badge_box,
+      portrait_layout: result.frame_portrait_layout,
+    }, imageUrl);
+    const overlay = el("frame-roulette");
+    overlay.classList.add("is-case-result");
+    overlay.classList.toggle("is-resource-result", resource);
+    const tryOn = el("frame-roulette-try");
+    tryOn.hidden = resource || !state.caseCatalog?.rewards.some((reward) => reward.frame_id === result.frame_id);
+    tryOn.onclick = () => {
+      closeFrameRoulette();
+      tryCaseFrame(result.frame_id);
+    };
+    revealRouletteAward(caseRewardSummary(result), imageUrl, fx, resource, announce);
+  }
+
+  el("case-last-reward").addEventListener("click", () => {
+    const result = state.caseCatalog?.last_reward;
+    if (!result || state.caseOpening || state.packOpening) return;
+    showRoulette("Последняя награда", "", caseBackdrop(), true);
+    showCaseAward(result, false);
+  });
+
   async function openCase() {
     if (state.caseOpening || state.packOpening || !state.caseCatalog) return;
     if (state.crystals < state.caseCatalog.price) {
@@ -4145,6 +4645,7 @@
       return;
     }
     state.caseOpening = true;
+    caseCatalogRevision += 1;
     updateCaseButton();
     const price = state.caseCatalog.price;
     const confirmed = await showShopDialog({
@@ -4159,7 +4660,7 @@
       return;
     }
     const rewards = state.caseCatalog.rewards;
-    const overlay = showRoulette("Премиум-кейс", "Открываем кейс…", new URL("premium-case.webp", staticBase));
+    const overlay = showRoulette("Премиум-кейс", "Открываем кейс…", caseBackdrop(), true, el("case-open-button"));
 
     let result;
     try {
@@ -4171,6 +4672,7 @@
       syncBackButton();
       showError(error);
       await loadProfile().catch(showError);
+      if (error.retryable) loadCaseCatalog().catch(showError);
       return;
     }
 
@@ -4181,7 +4683,9 @@
       setBalance(result.dust);
       setRolls(result.rolls);
       state.caseCatalog.progress = result.progress;
+      state.caseCatalog.last_reward = result;
       renderCaseProgress();
+      renderLastCaseReward();
       const prizes = rewards.map((reward) => ({
         id: reward.id,
         title: reward.frame_id ? reward.title : `${reward.title} · ${reward.quantity}`,
@@ -4194,24 +4698,14 @@
         title: result.frame_title || caseRewardSummary(result),
         image: casePrizeImage(result.reward, winningPreview || result.frame_preview_url),
         resource: !result.frame_id,
-      });
+      }, { allowSkip: true });
     } catch (_error) {
       // Keep the awarded result visible even if a visual update fails.
       loadProfile().catch(showError);
     } finally {
       state.caseOpening = false;
       updateCaseButton();
-      const legacyDuplicate = result.duplicate && !result.frame_copies_awarded;
-      const imageUrl = casePrizeImage(legacyDuplicate ? "dust" : result.reward, legacyDuplicate ? null : result.frame_preview_url);
-      const fx = result.frame_id && !legacyDuplicate
-        ? frameEffects({
-          effect: result.frame_effect, rarity: result.frame_rarity, accent: result.frame_accent,
-          ornament_url: result.frame_ornament_url, style: result.frame_theme,
-          motion_url: result.frame_motion_url, rarity_badge_box: result.frame_rarity_badge_box,
-          portrait_layout: result.frame_portrait_layout,
-        }, imageUrl)
-        : null;
-      revealRouletteAward(caseRewardSummary(result), imageUrl, fx, legacyDuplicate || !result.frame_id);
+      showCaseAward(result);
     }
   }
 
@@ -4303,12 +4797,19 @@
     container.append(exclusives);
   }
 
-  function showRoulette(title, status, backdrop) {
+  let rouletteReturnFocus = null;
+
+  function showRoulette(title, status, backdrop, isCase = false, origin = document.activeElement) {
     const overlay = el("frame-roulette");
+    if (overlay.hidden) rouletteReturnFocus = origin;
+    overlay.classList.toggle("is-case", isCase);
+    overlay.classList.remove("is-case-result", "is-resource-result");
     overlay.style.setProperty("--roulette-art", `url("${backdrop}")`);
     el("frame-roulette-title").textContent = title;
     el("frame-roulette-result").textContent = status;
     el("frame-roulette-close").hidden = true;
+    el("frame-roulette-try").hidden = true;
+    el("frame-roulette-skip").hidden = true;
     el("frame-roulette-track").replaceChildren();
     el("frame-roulette-track").classList.remove("is-settled");
     el("frame-roulette-track").style.transform = "none";
@@ -4321,7 +4822,8 @@
 
   let previousRoulette = null;
 
-  async function animateRoulette(items, winner) {
+  async function animateRoulette(items, winner, { allowSkip = false } = {}) {
+    if (allowSkip && (dropMotion.matches || document.hidden)) return;
     const track = el("frame-roulette-track");
     const winnerIndex = 21 + Math.floor(Math.random() * 5);
     const reel = Array.from({ length: winnerIndex + 5 }, () => null);
@@ -4367,6 +4869,12 @@
     }
     const animation = track.animate([{ transform: "translateX(0)" }, { transform: end }],
       { duration: 3400, easing: "cubic-bezier(.12,.65,.12,1)", fill: "forwards" });
+    const skip = el("frame-roulette-skip");
+    const skipAnimation = () => animation.finish();
+    if (allowSkip) {
+      skip.hidden = false;
+      skip.addEventListener("click", skipAnimation);
+    }
     const finish = () => { if (document.hidden || reduced.matches) animation.finish(); };
     document.addEventListener("visibilitychange", finish);
     reduced.addEventListener("change", finish);
@@ -4375,12 +4883,14 @@
       track.style.transform = end;
       track.classList.add("is-settled");
       animation.cancel();
+      skip.hidden = true;
+      skip.removeEventListener("click", skipAnimation);
       document.removeEventListener("visibilitychange", finish);
       reduced.removeEventListener("change", finish);
     }
   }
 
-  function revealRouletteAward(summary, imageUrl, effects, resource = false) {
+  function revealRouletteAward(summary, imageUrl, effects, resource = false, announce = true) {
     const award = document.createElement("img");
     award.src = imageUrl;
     award.alt = "";
@@ -4392,7 +4902,7 @@
     const close = el("frame-roulette-close");
     close.hidden = false;
     close.focus();
-    haptic("success");
+    if (announce) haptic("success");
   }
 
   async function openFramePack(pack, currency) {
@@ -4450,6 +4960,10 @@
     el("frame-roulette-track").replaceChildren();
     el("frame-roulette-award").replaceChildren();
     syncBackButton();
+    if (rouletteReturnFocus?.isConnected && !rouletteReturnFocus.disabled) {
+      rouletteReturnFocus.focus({ preventScroll: true });
+    }
+    rouletteReturnFocus = null;
   }
 
   el("frame-roulette-close").addEventListener("click", closeFrameRoulette);
@@ -4493,7 +5007,7 @@
 
   async function equipFrame(card, frame) {
     const result = await api(`/api/cards/${card.id}/frame`, {
-      method: "POST", body: JSON.stringify({ frame_id: frame.id }),
+      method: "POST", body: JSON.stringify({ frame_id: frame.id, bind: frame.id !== "classic" }),
     });
     applyCardUpdate(result.card);
     if (state.activePage === "collection") {
@@ -4506,7 +5020,7 @@
     }
     if (state.activePage === "account") renderFavorites();
     showNotice(frame.id === "classic" ? "Рамка снята и возвращена в инвентарь."
-      : `Рамка «${frame.title}» надета на «${result.card.name}».`);
+      : `Рамка «${frame.title}» закреплена на «${result.card.name}».`);
     haptic("success");
     return result.card;
   }
@@ -4526,6 +5040,29 @@
   window.setInterval(updateAuctionCountdowns, 1000);
 
   let tradeLoadRevision = 0;
+  let tradeInventoryRequest = 0;
+  let tradeInventoryTimer = 0;
+  let tradeDraftLoading = false;
+  let tradeDraftWarning = "";
+
+  function readTradeDraft() {
+    try {
+      const draft = JSON.parse(playerPreference("trade-draft") || "null");
+      if (Array.isArray(draft?.cardIds) && draft.cardIds.length > 0 && draft.cardIds.length <= 10
+          && draft.cardIds.every((id) => Number.isSafeInteger(id) && id > 0)) return draft;
+    } catch (_error) { /* An invalid saved draft is ignored. */ }
+    return null;
+  }
+
+  function saveTradeDraft(cardIds, requestId = null) {
+    const prior = readTradeDraft()?.labels;
+    const labels = {};
+    for (const id of cardIds) {
+      const card = state.selected.get(id);
+      labels[id] = card ? `${card.name} ${formatPrintNumber(card)}` : prior?.[id];
+    }
+    playerPreference("trade-draft", cardIds.length ? JSON.stringify({ cardIds, requestId, labels }) : "");
+  }
 
   function renderTradeCards(container, cards, emptyText) {
     container.replaceChildren();
@@ -4541,7 +5078,7 @@
       const caption = document.createElement("small");
       const details = [card.name, card.rarity_title, `#${card.print_no}`];
       if (card.upgrade_level) details.push(`+${card.upgrade_level}`);
-      if (hasCustomFrame(card)) details.push(card.style_title);
+      if (hasCustomFrame(card)) details.push(equippedFrameLabel(card));
       caption.textContent = details.join(" · ");
       const preview = cardButton(card, false, true);
       preview.disabled = true;
@@ -4583,19 +5120,23 @@
     };
     el("trade-state").textContent = opening ? "Откройте или обновите предложение"
       : statusText[trade?.status] || "Выберите карты для обмена";
+    const resume = el("trade-resume-draft");
+    resume.hidden = !canSelect || Boolean(trade || state.selected.size || !readTradeDraft());
+    resume.disabled = tradeDraftLoading;
+    const draftStatus = el("trade-draft-status");
+    draftStatus.hidden = !canSelect || !tradeDraftWarning;
+    draftStatus.textContent = tradeDraftWarning;
     el("inventory-section").hidden = !canSelect;
     el("inventory-title").textContent = trade
       ? "Ваш инвентарь · добавьте встречные карты"
       : "Ваш инвентарь · выберите карты";
-    const inventoryCards = state.inventory.filter((card) =>
-      card.name.toLowerCase().includes(state.query) ||
-      card.series.toLowerCase().includes(state.query));
+    const inventoryCards = state.inventory;
     el("inventory-cards").replaceChildren();
     if (canSelect && !inventoryCards.length) {
       const empty = document.createElement("div");
       empty.className = "empty-state";
       empty.style.gridColumn = "1 / -1";
-      empty.textContent = state.inventory.length ? "По запросу ничего не найдено" : "В инвентаре нет карт";
+      empty.textContent = state.query ? "По запросу ничего не найдено" : "В инвентаре нет карт";
       el("inventory-cards").append(empty);
     } else if (canSelect) {
       inventoryCards.forEach((card) => {
@@ -4603,9 +5144,11 @@
         el("inventory-cards").append(cardButton(
           card, selected, Boolean(card.lock_reason) || (!selected && state.selected.size >= 10),
           () => {
-            if (state.tradeSubmitting) return;
+            if (state.tradeSubmitting || tradeDraftLoading) return;
+            tradeDraftWarning = "";
             if (state.selected.has(card.id)) state.selected.delete(card.id);
             else state.selected.set(card.id, card);
+            if (!trade) saveTradeDraft([...state.selected.keys()]);
             render();
           }));
       });
@@ -4636,12 +5179,26 @@
   }
 
   async function loadInventory(page = 1) {
-    const data = await api(`/api/inventory?page=${page}`);
-    state.inventory = data.items;
-    state.page = data.page;
-    state.pages = data.pages;
-    setBalance(data.balance);
-    render();
+    const request = ++tradeInventoryRequest;
+    const status = el("trade-inventory-status");
+    status.textContent = "Загружаем карты…";
+    el("prev").disabled = true;
+    el("next").disabled = true;
+    try {
+      const params = new URLSearchParams({ page, q: state.query });
+      const data = await api(`/api/inventory?${params}`);
+      if (request !== tradeInventoryRequest) return;
+      state.inventory = data.items;
+      state.page = data.page;
+      state.pages = data.pages;
+      setBalance(data.balance, data);
+      status.textContent = "";
+      render();
+    } catch (error) {
+      if (request !== tradeInventoryRequest) return;
+      status.replaceChildren(displayButton("Повторить загрузку", () => loadInventory(page)));
+      throw error;
+    }
   }
   async function loadTrade() {
     const revision = ++tradeLoadRevision;
@@ -4653,37 +5210,138 @@
     render();
     if (needsInventory) await loadInventory(1);
   }
-  async function createOffer(cards) {
+  async function createOffer(cardIds, requestId) {
     const data = await api("/api/trades", {
       method: "POST",
-      body: JSON.stringify({ card_ids: cards.map((card) => card.id) }),
+      body: JSON.stringify({ card_ids: cardIds }),
+      idempotencyKey: requestId,
     });
     state.tradeToken = data.token;
     state.link = data.link;
     state.trade = data.trade;
-    await navigator.clipboard?.writeText(data.link).catch(() => {});
+    tradeDraftWarning = "";
+    state.selected.clear();
+    saveTradeDraft([]);
+    navigator.clipboard?.writeText(data.link).catch(() => {});
     render();
     el("share-link").value = data.link;
   }
+
+  async function resumeTradeDraft() {
+    const draft = readTradeDraft();
+    if (!draft || tradeDraftLoading || state.tradeToken) return;
+    tradeDraftLoading = true;
+    render();
+    try {
+      if (draft.requestId) {
+        const status = await api(`/api/operations/${encodeURIComponent(draft.requestId)}`);
+        if (status.completed) {
+          await createOffer(draft.cardIds, draft.requestId);
+          return;
+        }
+      }
+      const { items } = await api("/api/trades/draft", {
+        method: "POST", body: JSON.stringify({ card_ids: draft.cardIds }),
+      });
+      if (state.tradeToken) return;
+      state.selected = new Map(items.map((card) => [card.id, card]));
+      const unavailable = draft.cardIds.filter((id) => !state.selected.has(id));
+      saveTradeDraft([...state.selected.keys()], unavailable.length ? null : draft.requestId);
+      tradeDraftWarning = unavailable.length
+        ? `Уже недоступны для обмена: ${unavailable.map((id) => draft.labels?.[id] || `карта #${id}`).join(", ")}.`
+        : "";
+    } catch (error) { showError(error); }
+    finally {
+      tradeDraftLoading = false;
+      render();
+    }
+  }
+  let dailyRewardBusy = false;
+  let dailyRewardReceived = null;
+
+  function renderDailyReward(profile) {
+    if (!profile) return;
+    const available = profile.daily_reward_available;
+    el("daily-button").disabled = dailyRewardBusy || !available;
+    el("daily-button").textContent = dailyRewardBusy ? "Получаем…" : available ? "Забрать" : "Получено";
+    if (available) {
+      dailyRewardReceived = null;
+      el("daily-status").textContent = `Ежедневная награда: ${profile.vip_daily_reward} пыли${profile.vip.active ? " · VIP-бонус" : ""}`;
+    } else {
+      const received = dailyRewardReceived === null ? "" : `+${dailyRewardReceived} пыли. `;
+      el("daily-status").textContent = `${received}Следующая награда: ${localDateTime(profile.next_daily_reset)}`;
+    }
+    renderUpdateChannel(profile);
+  }
+
+  function animateDailyDust(amount) {
+    if (state.activePage !== "home" || document.hidden || dropMotion.matches || !Element.prototype.animate) return;
+    const source = el("daily-button").getBoundingClientRect();
+    const target = el("balance").getBoundingClientRect();
+    const centerX = source.left + source.width / 2;
+    const centerY = source.top + source.height / 2;
+    const dx = target.left + target.width / 2 - centerX;
+    const dy = target.top + target.height / 2 - centerY;
+    const burst = document.createElement("div");
+    burst.className = "daily-dust-burst";
+    burst.setAttribute("aria-hidden", "true");
+    burst.style.left = `${centerX}px`;
+    burst.style.top = `${centerY}px`;
+    const label = document.createElement("strong");
+    label.textContent = `+${amount} пыли`;
+    burst.append(label);
+    document.body.append(burst);
+    const animations = [label.animate([
+      { transform: "translate(-50%, -30%) scale(.8)", opacity: 0 },
+      { transform: "translate(-50%, -130%) scale(1)", opacity: 1, offset: .25 },
+      { transform: "translate(-50%, -185%) scale(.96)", opacity: 0 },
+    ], { duration: 870, easing: "ease-out", fill: "both" })];
+    for (const [index, x] of [-28, -16, -5, 8, 19, 29].entries()) {
+      const mote = document.createElement("span");
+      burst.append(mote);
+      animations.push(mote.animate([
+        { transform: "translate(0, 0) scale(.6)", opacity: 0 },
+        { transform: `translate(${x}px, -24px) scale(1)`, opacity: 1, offset: .24 },
+        { transform: `translate(${dx}px, ${dy}px) scale(.25)`, opacity: 0 },
+      ], { duration: 670, delay: index * 36, easing: "ease-in-out", fill: "both" }));
+    }
+    const stop = () => {
+      if (document.hidden || dropMotion.matches) animations.forEach((animation) => animation.cancel());
+    };
+    document.addEventListener("visibilitychange", stop);
+    dropMotion.addEventListener("change", stop);
+    Promise.allSettled(animations.map((animation) => animation.finished)).then(() => {
+      document.removeEventListener("visibilitychange", stop);
+      dropMotion.removeEventListener("change", stop);
+      burst.remove();
+    });
+  }
+
   async function claimDailyReward() {
-    el("daily-button").disabled = true;
+    if (dailyRewardBusy || !state.profile?.daily_reward_available) return;
+    dailyRewardBusy = true;
+    renderDailyReward(state.profile);
     try {
       const result = await api("/api/daily-reward", { method: "POST", body: "{}" });
       setBalance(result.balance);
-      if (state.profile) state.profile.daily_reward_available = false;
-      el("daily-channel-link").hidden = true;
-      el("daily-status").textContent = "Награда уже получена. После полуночи по Москве.";
-      el("daily-button").textContent = "Получено";
-      showNotice(`Получена ежедневная награда: +${result.amount} пыли.`);
+      dailyChangedAt = walletGeneration;
+      state.profile.daily_reward_available = false;
+      state.profile.next_daily_reset = result.next_daily_reset ?? state.profile.next_daily_reset;
+      dailyRewardReceived = result.amount;
+      animateDailyDust(result.amount);
       haptic("success");
     } catch (error) {
+      if (error.code !== "subscription_required") showError(error);
+      dailyRewardBusy = false;
+      renderDailyReward(state.profile);
       if (error.code === "subscription_required") {
         el("daily-status").textContent = error.message;
         el("daily-button").textContent = "Проверить подписку";
-        renderUpdateChannel(state.profile);
-      } else showError(error);
-      el("daily-button").disabled = false;
+      } else if (error.status === 400 || error.retryable) loadProfile().catch(showDropLoadError);
+      return;
     }
+    dailyRewardBusy = false;
+    renderDailyReward(state.profile);
   }
 
   function renderUpdateChannel(profile) {
@@ -5211,8 +5869,13 @@
         await loadTrade();
         haptic("success");
       } else {
-        await createOffer(cards);
-        state.selected.clear();
+        const cardIds = cards.map((card) => card.id);
+        const draft = readTradeDraft();
+        const sameCards = draft?.cardIds.length === cardIds.length
+          && cardIds.every((id, index) => id === draft.cardIds[index]);
+        const requestId = (sameCards && draft.requestId) || newRequestId();
+        saveTradeDraft(cardIds, requestId);
+        await createOffer(cardIds, requestId);
       }
     } catch (error) { showError(error); }
     finally { state.tradeSubmitting = false; render(); }
@@ -5243,17 +5906,23 @@
     state.tradeToken = null;
     state.link = null;
     state.selected.clear();
+    tradeDraftWarning = "";
     const url = new URL(location.href);
     url.searchParams.delete("trade");
     history.replaceState(history.state, "", url);
     render();
     loadInventory(1).catch(showError);
   });
+  el("trade-resume-draft").addEventListener("click", resumeTradeDraft);
   el("prev").addEventListener("click", () => loadInventory(state.page - 1).catch(showError));
   el("next").addEventListener("click", () => loadInventory(state.page + 1).catch(showError));
   el("search").addEventListener("input", (event) => {
-    state.query = event.target.value.trim().toLowerCase();
-    render();
+    clearTimeout(tradeInventoryTimer);
+    tradeInventoryRequest += 1;
+    state.query = event.target.value.trim();
+    el("prev").disabled = true;
+    el("next").disabled = true;
+    tradeInventoryTimer = setTimeout(() => loadInventory().catch(showError), 250);
   });
   el("copy").addEventListener("click", async () => {
     try {
@@ -5283,8 +5952,10 @@
       () => searchPlayers(query).catch(showError), 250);
   });
   el("player-page-back").addEventListener("click", closePlayerProfile);
-  el("player-more").addEventListener("click", () =>
-    loadPublicInventory().catch(showError));
+  el("player-collection-prev").addEventListener("click", () =>
+    loadPublicInventory(state.publicInventoryPage - 1).catch(showError));
+  el("player-collection-next").addEventListener("click", () =>
+    loadPublicInventory(state.publicInventoryPage + 1).catch(showError));
   document.querySelectorAll("[data-open-page]").forEach((button) => {
     button.addEventListener("click", () => showPage(button.dataset.openPage));
   });
@@ -5304,11 +5975,16 @@
   });
   el("market-search").addEventListener("input", () => {
     clearTimeout(state.marketSearchTimer);
-    el("market-more").disabled = true;
+    renderListPager("market", state.marketPage, state.marketHasNext, true);
     state.marketVersion = (state.marketVersion || 0) + 1;
     state.marketSearchTimer = setTimeout(() => loadMarket().catch(showError), 250);
   });
-  el("market-more").addEventListener("click", () => loadMarket(state.marketNextPage).catch(showError));
+  el("market-prev").addEventListener("click", () => loadMarket(state.marketPage - 1, { scrollToList: true }).catch(showError));
+  el("market-next").addEventListener("click", () => loadMarket(state.marketPage + 1, { scrollToList: true }).catch(showError));
+  el("my-listings-prev").addEventListener("click", () => loadMyListings(state.myListingsPage - 1).catch(showError));
+  el("my-listings-next").addEventListener("click", () => loadMyListings(state.myListingsPage + 1).catch(showError));
+  el("my-bids-prev").addEventListener("click", () => loadMyBids(state.myBidsPage - 1).catch(showError));
+  el("my-bids-next").addEventListener("click", () => loadMyBids(state.myBidsPage + 1).catch(showError));
   bindHomeSummonTilt();
   el("drop-all-button").addEventListener("click", () => openDrop(true));
   el("drop-button").addEventListener("click", () => openDrop());
@@ -5405,11 +6081,16 @@
     albums.favorites = !albums.favorites;
     loadCollectionAlbums(1).catch(showError);
   });
+  el("album-almost-sort").addEventListener("click", () => {
+    albums.almostComplete = !albums.almostComplete;
+    albums.listPage = 1;
+    loadCollectionAlbums(1).catch(showError);
+  });
   el("collection-album-prev").addEventListener("click", () => loadCollectionAlbums(albums.page - 1).catch(showError));
   el("collection-album-next").addEventListener("click", () => loadCollectionAlbums(albums.page + 1).catch(showError));
   el("collection-copy-prev").addEventListener("click", () => loadCollectionCopies(copies.page - 1).catch(showError));
   el("collection-copy-next").addEventListener("click", () => loadCollectionCopies(copies.page + 1).catch(showError));
-  el("collection-copy-review").addEventListener("click", reviewCollectionCopies);
+  el("collection-copy-review").addEventListener("click", () => reviewCollectionCopies());
   el("collection-select").addEventListener("click", () => {
     state.selectMode = true;
     renderCollectionSelection();
@@ -5440,7 +6121,7 @@
     frameShopPreview.close();
     goToFirstCard();
   });
-  el("dust-selected").addEventListener("click", reviewSelectedCards);
+  el("dust-selected").addEventListener("click", () => reviewSelectedCards());
   el("transfer-links-open").addEventListener("click", openPendingTransfers);
   el("sell-selected").addEventListener("click", sellSelected);
   function startAuctionSelection() {
@@ -5495,9 +6176,11 @@
   } catch (_error) { /* browser preview */ }
 
   document.addEventListener("visibilitychange", () => {
+    document.documentElement.classList.toggle("motion-paused", document.hidden);
     if (document.hidden && state.activePage === "collection") rememberCollectionSettings();
-    else if (document.visibilityState === "visible" && getInitData()) {
+    else if (document.visibilityState === "visible" && getInitData() && el("subscription-gate").hidden) {
       loadProfile().catch(showDropLoadError);
+      resumeStarPayment();
     }
   });
 
@@ -5812,6 +6495,25 @@
   });
 
   window.ChizuLoader?.set(0.62);
+  el("subscription-channel").addEventListener("click", (event) => {
+    if (!tg?.openTelegramLink) return;
+    event.preventDefault();
+    tg.openTelegramLink(event.currentTarget.href);
+  });
+  el("subscription-check").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    const status = el("subscription-status");
+    status.textContent = "Проверяем подписку…";
+    try {
+      await api("/api/subscription/check", { method: "POST", body: "{}" });
+      closeSubscriptionGate();
+      if (gameplayStarted) await loadProfile();
+      else await startApp();
+    } catch (error) { status.textContent = error.message; }
+    finally { button.disabled = false; }
+  });
+
   async function startApp() {
     // Some mobile clients provide launch data shortly after the SDK is ready.
     for (let attempt = 0; !getInitData() && attempt < 20; attempt += 1) await pause(100);
@@ -5821,17 +6523,25 @@
       el("drop-retry").hidden = true;
       el("inventory-cards").replaceChildren();
     } else {
-      loadProfile().then(() => {
+      return loadProfile().then(() => {
+        gameplayStarted = true;
         state.compactCollection = playerPreference("collection-layout") === "list";
         restoreCollectionSettings();
         restorePendingOperation();
+        resumeStarPayment();
         if (state.tradeToken) showPage("trade");
         const showcaseToken = new URLSearchParams(location.search).get("showcase");
         if (showcaseToken) openShowcase(showcaseToken).catch(showError);
         const giftToken = new URLSearchParams(location.search).get("gift");
         if (giftToken) openGiftEnvelope(giftToken).catch((error) => openInfoPopup("Подарок", error.message));
+        const lotKey = new URLSearchParams(location.search).get("lot");
+        if (lotKey) {
+          showPage("trade");
+          openAuctionListing(null, { sharedKey: lotKey }).catch((error) => openInfoPopup("Аукцион", error.message));
+        }
         window.ChizuLoader?.finish();
       }).catch((error) => {
+        if (!el("subscription-gate").hidden) return;
         showDropLoadError(error);
         window.ChizuLoader?.fail(error.message || "Не удалось загрузить профиль.");
       });
